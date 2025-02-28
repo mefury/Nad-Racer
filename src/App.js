@@ -280,7 +280,7 @@ function ConnectedContent({ startGame, finalScore, contractAddress, contractABI,
     enabled: isConnected,
     chainId: 10143,
   });
-
+  const { connect, connectors, isPending: isConnecting } = useConnect();
   const { writeContract: startGameWrite, data: startTxHash, isPending: isStarting } = useWriteContract();
   const { writeContract: recordAndClaimWrite, data: claimTxHash, isPending: isClaiming, error: claimError } = useWriteContract();
 
@@ -316,6 +316,20 @@ function ConnectedContent({ startGame, finalScore, contractAddress, contractABI,
       queryClient.invalidateQueries(["getTotalPoints", address]); // Refresh points
     }
   }, [claimError, claimTxConfirmed, address]);
+
+  // Handle wallet connection from either button
+  const handleConnect = async () => {
+    if (!window.ethereum) {
+      alert("Please install MetaMask to play Nad Racer");
+      return;
+    }
+    try {
+      await connect({ connector: connectors[0] });
+    } catch (error) {
+      console.error("Failed to connect wallet:", error);
+      alert("Failed to connect wallet. Please try again.");
+    }
+  };
 
   // Initiate startGame transaction
   const handleStartGame = () => {
@@ -357,25 +371,30 @@ function ConnectedContent({ startGame, finalScore, contractAddress, contractABI,
     console.log("Player Total Points (getTotalPoints):", playerTotalPoints);
   }, [playerTotalPoints]);
 
-  // Display player info on home screen
-  if (showPlayerInfo && isConnected) {
-    return (
-      <>
-        <p>Wallet: {address?.slice(2, 8)}...{address?.slice(-4)}</p>
-        <p>Your Points: {Number(playerTotalPoints).toFixed(2)} NP</p> {/* Changed to "Your Points" */}
-      </>
-    );
+  // Display player info on home screen when connected, otherwise show connect message
+  if (showPlayerInfo) {
+    if (isConnected) {
+      return (
+        <>
+          <p>Wallet: {address?.slice(2, 8)}...{address?.slice(-4)}</p>
+          <p>Your Points: {Number(playerTotalPoints).toFixed(2)} NP</p> {/* Changed to "Your Points" */}
+        </>
+      );
+    } else {
+      return <p>Connect Your Wallet</p>;
+    }
   }
 
+  // Main start button behavior
   return (
     <>
       {!finalScore && (
         <button
           className="start-button"
-          onClick={handleStartGame}
-          disabled={isStarting || !isConnected || chainId !== 10143}
+          onClick={isConnected ? handleStartGame : handleConnect}
+          disabled={isStarting || isConnecting || (isConnected && chainId !== 10143)}
         >
-          {isStarting ? "Starting..." : "Start Game"}
+          {isConnecting ? "Connecting..." : isStarting ? "Starting..." : isConnected ? "Start Game" : "Connect"}
         </button>
       )}
       {finalScore > 0 && (
