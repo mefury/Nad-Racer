@@ -47,7 +47,23 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     BACKGROUND_COLOR: 0x000022, // Deep space blue background
     DRUM_COLOR: 0x4682b4, // Steel blue for drums
     BOX_COLOR: 0x8b4513, // Brown for boxes
-    COIN_COLOR: 0xffff00, // Yellow for coins
+
+    // Coin Controllers
+    COIN_COLOR: 0xFFD700, // Golden color for coins
+    COIN_BORDER_COLOR: 0xB8860B, // Darker gold for coin border
+    COIN_RADIUS: 0.8, // Radius of coins
+    COIN_THICKNESS: 0.2, // Thickness of coins
+    COIN_SIZE: 1.2, // Scale factor for coin size
+    COIN_BORDER_THICKNESS: 0.1, // Thickness of the coin border
+    COIN_POSITION_Y: 0.6, // Height above road (floating, was 0.5)
+    COIN_POSITION_X_OFFSET: 0.25, // Lateral offset multiplier (0-1) from road center
+    COIN_POSITION_Z_START_OFFSET: -60, // Starting Z offset from spawn point
+    COIN_ROW_SPACING: 2.5, // Distance between coins in a row
+    COIN_ROW_MIN_COUNT: 5, // Minimum number of coins in a row
+    COIN_ROW_MAX_COUNT: 10, // Maximum number of coins in a row
+    COIN_SPAWN_CHANCE_LEFT: 0.5, // Probability of spawning on left side (0-1)
+    COIN_FLOAT_AMPLITUDE: 0, // Vertical float animation amplitude
+    COIN_FLOAT_SPEED: 0, // Speed of float animation (radians per second)
 
     // Ship Controllers (Updated for OBJ model)
     SHIP_OBJ_PATH: "/models/raptor.obj", // Path to the OBJ file in public folder
@@ -129,9 +145,6 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     DRUM_RADIUS: 1.5, // Radius of drum obstacles
     DRUM_HEIGHT: 3, // Height of drum obstacles
     BOX_SIZE: 3, // Size of box obstacles (cube)
-    COIN_RADIUS: 0.5, // Radius of coins
-    COIN_THICKNESS: 0.1, // Thickness of coins
-    COIN_SIZE: 1.0, // Scale factor for coin size (1.0 = default)
 
     // Camera
     CAMERA_FOV: 75, // Field of view
@@ -592,20 +605,43 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     );
     const coinMaterial = new THREE.MeshPhysicalMaterial({
       color: CONFIG.COIN_COLOR,
+      ...glossyMaterialProps(scene.environment), // Shiny glossy material like the ship
+    });
+    // Coin border geometry and material
+    const coinBorderGeometry = new THREE.CylinderGeometry(
+      CONFIG.COIN_RADIUS * CONFIG.COIN_SIZE + CONFIG.COIN_BORDER_THICKNESS,
+      CONFIG.COIN_RADIUS * CONFIG.COIN_SIZE + CONFIG.COIN_BORDER_THICKNESS,
+      CONFIG.COIN_THICKNESS * CONFIG.COIN_SIZE * 0.5, // Thinner than coin body
+      32
+    );
+    const coinBorderMaterial = new THREE.MeshPhysicalMaterial({
+      color: CONFIG.COIN_BORDER_COLOR,
       ...glossyMaterialProps(scene.environment),
     });
 
-    // Spawn coins in a cluster
+    // Spawn coins in a row (Temple Run style) with floating effect
     const spawnCoins = (zBase) => {
-      const coinCount = Math.floor(Math.random() * 3) + 1; // 1-3 coins
-      const coinZ = zBase - 60; // Offset from spawn point
+      const coinCount = Math.floor(Math.random() * (CONFIG.COIN_ROW_MAX_COUNT - CONFIG.COIN_ROW_MIN_COUNT + 1)) + CONFIG.COIN_ROW_MIN_COUNT;
+      const side = Math.random() < CONFIG.COIN_SPAWN_CHANCE_LEFT ? -1 : 1; // Left or right based on chance
+      const xPos = side * (CONFIG.ROAD_WIDTH * CONFIG.COIN_POSITION_X_OFFSET); // X position with offset
+      const startZ = zBase + CONFIG.COIN_POSITION_Z_START_OFFSET; // Starting Z position
+
       for (let i = 0; i < coinCount; i++) {
+        const coinGroup = new THREE.Group(); // Group for coin and border
         const coin = new THREE.Mesh(coinGeometry, coinMaterial);
-        coin.position.set((Math.random() - 0.5) * CONFIG.ROAD_WIDTH, 0.5, coinZ - i * 10); // Staggered Z
+        const coinBorder = new THREE.Mesh(coinBorderGeometry, coinBorderMaterial);
+
+        coin.position.y = CONFIG.COIN_POSITION_Y; // Base height above road
+        coinBorder.position.y = CONFIG.COIN_POSITION_Y; // Align border with coin
         coin.rotation.x = Math.PI / 2; // Stand upright
-        coin.castShadow = true;
-        scene.add(coin);
-        coins.push(coin);
+        coinBorder.rotation.x = Math.PI / 2;
+
+        coinGroup.add(coin, coinBorder);
+        coinGroup.position.set(xPos, 0, startZ - i * CONFIG.COIN_ROW_SPACING); // Place in a row
+        coinGroup.castShadow = true;
+        coinGroup.userData = { baseY: CONFIG.COIN_POSITION_Y, timeOffset: Math.random() * Math.PI * 2 }; // For floating animation
+        scene.add(coinGroup);
+        coins.push(coinGroup);
       }
     };
 
@@ -741,6 +777,12 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           scene.remove(oldSegment.road, oldSegment.leftBorder, oldSegment.rightBorder, oldSegment.line);
         }
 
+        // Update coin floating animation
+        coins.forEach((coinGroup) => {
+          const floatOffset = Math.sin(currentTime * CONFIG.COIN_FLOAT_SPEED + coinGroup.userData.timeOffset) * CONFIG.COIN_FLOAT_AMPLITUDE;
+          coinGroup.position.y = coinGroup.userData.baseY + floatOffset;
+        });
+
         // Collision detection with obstacles
         const rocketBox = new THREE.Box3().setFromObject(rocketGroup).expandByScalar(0.2);
         obstacles.forEach((obstacle, i) => {
@@ -781,16 +823,16 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         });
 
         // Coin collection (no mid-game minting)
-        coins.forEach((coin, i) => {
-          const coinBox = new THREE.Box3().setFromObject(coin).expandByScalar(0.3);
+        coins.forEach((coinGroup, i) => {
+          const coinBox = new THREE.Box3().setFromObject(coinGroup).expandByScalar(0.3);
           if (rocketBox.intersectsBox(coinBox)) {
-            coin.visible = false;
-            scene.remove(coin);
-            coins.splice(i, 1); // Remove collected coin
+            coinGroup.visible = false;
+            scene.remove(coinGroup);
+            coins.splice(i, 1); // Remove collected coin group
             setScore((prev) => prev + 10); // Increase score
 
             // Generate coin collection particles
-            const coinPosition = coin.position.clone();
+            const coinPosition = coinGroup.position.clone();
             const coinVelocities = new THREE.Vector3(0, 0.5, 0);
             const coinParticles = createParticles(
               CONFIG.COIN_PARTICLE_COUNT,
@@ -803,9 +845,9 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
             particlesRef.current.coin.push(coinParticles);
           }
           // Despawn coins behind rocket
-          if (coin.position.z > rocketGroup.position.z + CONFIG.DESPAWN_DISTANCE) {
-            coin.visible = false;
-            scene.remove(coin);
+          if (coinGroup.position.z > rocketGroup.position.z + CONFIG.DESPAWN_DISTANCE) {
+            coinGroup.visible = false;
+            scene.remove(coinGroup);
             coins.splice(i, 1);
           }
         });
