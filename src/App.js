@@ -133,7 +133,6 @@ function App() {
     setScore,
     setHealth,
   } = useGameState();
-  const [showWalletPopup, setShowWalletPopup] = useState(false); // State for wallet connection popup
 
   return (
     <WagmiProvider config={wagmiConfig}>
@@ -149,11 +148,7 @@ function App() {
             gameState={gameState}
           />
           {/* Wallet connect/disconnect button */}
-          <WalletConnect setShowWalletPopup={setShowWalletPopup} />
-          {/* Wallet selection popup */}
-          {showWalletPopup && (
-            <WalletPopup setShowWalletPopup={setShowWalletPopup} />
-          )}
+          <WalletConnect />
           {/* Main screen with title, start button, leaderboard, and player info */}
           {gameState === "start" && (
             <div className="main-screen">
@@ -204,44 +199,34 @@ function App() {
 }
 
 // Wallet connection/disconnection component
-function WalletConnect({ setShowWalletPopup }) {
+function WalletConnect() {
   const { isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+
+  const handleConnect = async () => {
+    if (!window.ethereum) {
+      alert("Please install MetaMask to play Nad Racer");
+      return;
+    }
+    
+    try {
+      await connect({ connector: connectors[0] }); // Use the injected connector
+    } catch (error) {
+      console.error("Failed to connect wallet:", error);
+      alert("Failed to connect wallet. Please try again.");
+    }
+  };
 
   return (
     <div className="wallet-connect">
       {isConnected ? (
         <button onClick={disconnect}>Disconnect</button>
       ) : (
-        <button onClick={() => setShowWalletPopup(true)}>Connect Wallet</button>
+        <button onClick={handleConnect} disabled={isPending}>
+          {isPending ? "Connecting..." : "Connect Wallet"}
+        </button>
       )}
-    </div>
-  );
-}
-
-// Wallet selection popup component
-function WalletPopup({ setShowWalletPopup }) {
-  const { connect, connectors } = useConnect();
-
-  return (
-    <div className="wallet-popup">
-      <h2>Select Wallet</h2>
-      <button
-        onClick={() => {
-          connect({ connector: connectors[0] });
-          setShowWalletPopup(false);
-        }}
-      >
-        MetaMask
-      </button>
-      <button
-        onClick={() => {
-          connect({ connector: connectors[1] });
-          setShowWalletPopup(false);
-        }}
-      >
-        Phantom
-      </button>
     </div>
   );
 }

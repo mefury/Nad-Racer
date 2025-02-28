@@ -19,36 +19,58 @@ const monadTestnet = {
   },
 };
 
+// Updated config with only MetaMask-compatible injected connector
 const wagmiConfig = createConfig({
   chains: [monadTestnet],
   transports: {
     [monadTestnet.id]: http(),
   },
   connectors: [
-    injected({ target: "metaMask" }), // MetaMask
-    injected({ target: "phantom" }),  // Phantom
+    injected(), // Generic injected connector that works with MetaMask and compatible wallets
   ],
   autoConnect: true,
 });
 
-if (window.ethereum) {
-  window.ethereum.request({
-    method: "wallet_switchEthereumChain",
-    params: [{ chainId: "0x279f" }],
-  }).catch((error) => {
-    if (error.code === 4902) {
-      window.ethereum.request({
-        method: "wallet_addEthereumChain",
-        params: [{
-          chainId: "0x279f",
-          chainName: "Monad Testnet",
-          rpcUrls: ["https://testnet-rpc.monad.xyz"],
-          nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-          blockExplorerUrls: ["https://testnet-monadexplorer.com"],
-        }],
-      });
+// Robust chain switching/adding logic
+async function setupNetwork() {
+  if (!window.ethereum) {
+    console.error("No Ethereum provider detected. Please install MetaMask.");
+    return false;
+  }
+
+  try {
+    // First try to switch to Monad Testnet
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: "0x279f" }],
+    });
+    return true;
+  } catch (switchError) {
+    // If chain not added (error code 4902), add it
+    if (switchError.code === 4902) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId: "0x279f",
+            chainName: "Monad Testnet",
+            rpcUrls: ["https://testnet-rpc.monad.xyz"],
+            nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+            blockExplorerUrls: ["https://testnet-monadexplorer.com"],
+          }],
+        });
+        return true;
+      } catch (addError) {
+        console.error("Failed to add Monad Testnet:", addError);
+        return false;
+      }
     }
-  });
+    console.error("Failed to switch to Monad Testnet:", switchError);
+    return false;
+  }
 }
+
+// Execute network setup when module loads
+setupNetwork();
 
 export { wagmiConfig, monadTestnet as chains };
