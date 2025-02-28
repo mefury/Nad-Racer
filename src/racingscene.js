@@ -3,11 +3,10 @@ import React, { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader";
 
-// Smart contract details
-const gameContractAddress = "0x35A0b55A86f55832FD85Bd8F093883Ca81fcf9ac"; // New contract address
-
+// RacingScene component renders the 3D racing game scene using Three.js
 function RacingScene({ score, setScore, setHealth, health, endGame, gameState }) {
-  const mountRef = useRef(null); // Reference for mounting the Three.js renderer
+  // Refs for managing Three.js objects and game state
+  const mountRef = useRef(null); // DOM element to mount the renderer
   const animationFrameId = useRef(null); // ID for animation frame to clean up on unmount
   const sceneRef = useRef(null); // Reference to the Three.js scene
   const rocketGroupRef = useRef(null); // Reference to the rocket object group
@@ -29,7 +28,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
   });
   const modelLoadedRef = useRef(false); // Tracks when the rocket model is loaded
 
-  // Controller Variables
+  // Configuration object for all game parameters
   const CONFIG = {
     // Texture properties for glossy look (applied to all objects using glossyMaterialProps)
     TEXTURE_ROUGHNESS: 0.01, // Controls surface smoothness (0 = ultra smooth, 1 = rough)
@@ -52,10 +51,10 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
 
     // Ship Controllers (Updated for OBJ model)
     SHIP_OBJ_PATH: "/models/raptor.obj", // Path to the OBJ file in public folder
-    SHIP_TARGET_LENGTH: 8.0, // Desired length of the ship
-    SHIP_TARGET_WIDTH: 4.0, // Desired width of the ship
-    SHIP_TARGET_HEIGHT: 1.6, // Desired height of the ship
-    SHIP_POSITION_Y: 1.0, // Vertical offset above the road
+    SHIP_TARGET_LENGTH: 6.0, // Desired length of the ship
+    SHIP_TARGET_WIDTH: 3.0, // Desired width of the ship
+    SHIP_TARGET_HEIGHT: 1.2, // Desired height of the ship
+    SHIP_POSITION_Y: 2.0, // Vertical offset above the road
     SHIP_ROTATION_X: Math.PI / 2, // Rotation around X-axis (adjust based on model orientation)
     SHIP_ROTATION_Y: 0, // Rotation around Y-axis
     SHIP_ROTATION_Z: 0, // Rotation around Z-axis
@@ -63,7 +62,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     // Exhaust Particle Position Offsets
     EXHAUST_OFFSET_X: 0.0, // X offset from ship center for exhaust particles
     EXHAUST_OFFSET_Y: 0.0, // Y offset from ship base for exhaust particles
-    EXHAUST_OFFSET_Z: 2.5, // Z offset from ship center (negative = rear, based on SHIP_TARGET_LENGTH / 2)
+    EXHAUST_OFFSET_Z: 5.5, // Z offset from ship center (negative = rear, based on SHIP_TARGET_LENGTH / 2)
 
     // Previous Ship Controllers (kept for reference, not used with OBJ)
     SHIP_LENGTH: 4.0, // Total length of the jet from nose to tail
@@ -156,7 +155,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     DESPAWN_DISTANCE: 20, // Distance behind rocket to despawn
   };
 
-  // Define glossy material properties with environment map for reflections
+  // Function to define glossy material properties with environment map for reflections
   const glossyMaterialProps = (envMap) => ({
     metalness: CONFIG.TEXTURE_METALNESS,
     roughness: CONFIG.TEXTURE_ROUGHNESS,
@@ -169,17 +168,19 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
   // Function to create a road segment with borders and a center line
   const createRoadSegment = (zOffset) => {
     const scene = sceneRef.current;
+    // Create road plane
     const roadGeometry = new THREE.PlaneGeometry(CONFIG.ROAD_WIDTH, CONFIG.ROAD_LENGTH, 1, 1);
     const roadMaterial = new THREE.MeshPhysicalMaterial({
       color: CONFIG.ROAD_COLOR,
       ...glossyMaterialProps(scene.environment),
     });
     const road = new THREE.Mesh(roadGeometry, roadMaterial);
-    road.rotation.x = -Math.PI / 2;
-    road.position.z = zOffset;
-    road.receiveShadow = true;
+    road.rotation.x = -Math.PI / 2; // Rotate to lie flat
+    road.position.z = zOffset; // Position along Z-axis
+    road.receiveShadow = true; // Enable shadow reception
     scene.add(road);
 
+    // Create road borders
     const borderGeometry = new THREE.BoxGeometry(CONFIG.BORDER_WIDTH, CONFIG.BORDER_HEIGHT, CONFIG.ROAD_LENGTH);
     const borderMaterial = new THREE.MeshPhysicalMaterial({
       color: CONFIG.BORDER_COLOR,
@@ -187,21 +188,22 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     });
     const leftBorder = new THREE.Mesh(borderGeometry, borderMaterial);
     const rightBorder = new THREE.Mesh(borderGeometry, borderMaterial);
-    leftBorder.position.set(-CONFIG.ROAD_WIDTH / 2, CONFIG.BORDER_HEIGHT / 2, zOffset);
-    rightBorder.position.set(CONFIG.ROAD_WIDTH / 2, CONFIG.BORDER_HEIGHT / 2, zOffset);
-    leftBorder.castShadow = true;
+    leftBorder.position.set(-CONFIG.ROAD_WIDTH / 2, CONFIG.BORDER_HEIGHT / 2, zOffset); // Left side
+    rightBorder.position.set(CONFIG.ROAD_WIDTH / 2, CONFIG.BORDER_HEIGHT / 2, zOffset); // Right side
+    leftBorder.castShadow = true; // Enable shadow casting
     rightBorder.castShadow = true;
     scene.add(leftBorder, rightBorder);
 
+    // Create center line
     const lineGeometry = new THREE.PlaneGeometry(0.3, CONFIG.ROAD_LENGTH);
     const lineMaterial = new THREE.MeshPhongMaterial({ color: CONFIG.LINE_COLOR });
     const line = new THREE.Mesh(lineGeometry, lineMaterial);
-    line.rotation.x = -Math.PI / 2;
+    line.rotation.x = -Math.PI / 2; // Rotate to lie flat
     line.position.z = zOffset;
     line.position.y = 0.01; // Slightly above road to avoid z-fighting
     scene.add(line);
 
-    return { road, leftBorder, rightBorder, line };
+    return { road, leftBorder, rightBorder, line }; // Return segment components
   };
 
   // Reset the game state when starting or restarting
@@ -209,32 +211,38 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     const scene = sceneRef.current;
     const rocketGroup = rocketGroupRef.current;
 
+    // Remove all obstacles from the scene
     obstaclesRef.current.forEach((obstacle) => scene.remove(obstacle));
     obstaclesRef.current = [];
 
+    // Remove all coins from the scene
     coinsRef.current.forEach((coin) => scene.remove(coin));
     coinsRef.current = [];
 
+    // Clear all particle effects
     Object.values(particlesRef.current).forEach((particleList) => {
       particleList.forEach((particle) => scene.remove(particle.mesh));
       particleList.length = 0;
     });
 
+    // Reset rocket position and rotation
     rocketGroup.position.set(0, CONFIG.SHIP_POSITION_Y, 0);
     rocketGroup.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z);
-    speedRef.current = { lateral: 0, forward: CONFIG.FORWARD_SPEED, boost: 0 };
-    controlsRef.current = { left: false, right: false, boost: false };
+    speedRef.current = { lateral: 0, forward: CONFIG.FORWARD_SPEED, boost: 0 }; // Reset speeds
+    controlsRef.current = { left: false, right: false, boost: false }; // Reset controls
 
+    // Remove old road segments
     roadSegmentsRef.current.forEach((segment) =>
       scene.remove(segment.road, segment.leftBorder, segment.rightBorder, segment.line)
     );
     roadSegmentsRef.current = [];
-    const segmentsAhead = 3;
+    const segmentsAhead = 3; // Number of segments ahead and behind
+    // Generate initial road segments
     for (let i = -segmentsAhead; i <= segmentsAhead; i++) {
       roadSegmentsRef.current.push(createRoadSegment(i * CONFIG.ROAD_LENGTH));
     }
 
-    nextSpawnZRef.current = -CONFIG.SPAWN_INTERVAL;
+    nextSpawnZRef.current = -CONFIG.SPAWN_INTERVAL; // Reset spawn position
   };
 
   // Update starfield positions to create an infinite scrolling effect
@@ -244,10 +252,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       for (let i = 0; i < CONFIG.STAR_COUNT; i++) {
         const i3 = i * 3;
         let z = positions[i3 + 2];
+        // Reposition stars that move out of range
         if (z > rocketZ + CONFIG.STAR_REPEAT_DISTANCE / 2) {
           z -= CONFIG.STAR_REPEAT_DISTANCE;
-          positions[i3] = (Math.random() - 0.5) * CONFIG.STAR_RANGE;
-          positions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_RANGE;
+          positions[i3] = (Math.random() - 0.5) * CONFIG.STAR_RANGE; // Random X
+          positions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_RANGE; // Random Y
           positions[i3 + 2] = z;
         } else if (z < rocketZ - CONFIG.STAR_REPEAT_DISTANCE / 2) {
           z += CONFIG.STAR_REPEAT_DISTANCE;
@@ -256,35 +265,36 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           positions[i3 + 2] = z;
         }
       }
-      stars.geometry.attributes.position.needsUpdate = true;
+      stars.geometry.attributes.position.needsUpdate = true; // Update star positions
     });
   };
 
   // Create particle effects for exhaust, boost, coins, and collisions
   const createParticles = (count, color, size, lifetime, position, velocities) => {
     const geometry = new THREE.BufferGeometry();
-    const positions = new Float32Array(count * 3);
-    const velocitiesArray = new Float32Array(count * 3);
-    const lifetimes = [];
+    const positions = new Float32Array(count * 3); // Position array for particles
+    const velocitiesArray = new Float32Array(count * 3); // Velocity array for movement
+    const lifetimes = []; // Lifetime array for each particle
 
+    // Initialize particle properties
     for (let i = 0; i < count; i++) {
       const i3 = i * 3;
-      positions[i3] = position.x + (Math.random() - 0.5) * 0.5;
-      positions[i3 + 1] = position.y + (Math.random() - 0.5) * 0.5;
-      positions[i3 + 2] = position.z + (Math.random() - 0.5) * 0.5;
-      velocitiesArray[i3] = velocities.x + (Math.random() - 0.5) * 0.2;
-      velocitiesArray[i3 + 1] = velocities.y + (Math.random() - 0.5) * 0.2;
-      velocitiesArray[i3 + 2] = velocities.z + (Math.random() - 0.5) * 0.2;
+      positions[i3] = position.x + (Math.random() - 0.5) * 0.5; // Random X offset
+      positions[i3 + 1] = position.y + (Math.random() - 0.5) * 0.5; // Random Y offset
+      positions[i3 + 2] = position.z + (Math.random() - 0.5) * 0.5; // Random Z offset
+      velocitiesArray[i3] = velocities.x + (Math.random() - 0.5) * 0.2; // Random X velocity
+      velocitiesArray[i3 + 1] = velocities.y + (Math.random() - 0.5) * 0.2; // Random Y velocity
+      velocitiesArray[i3 + 2] = velocities.z + (Math.random() - 0.5) * 0.2; // Random Z velocity
       lifetimes[i] = lifetime * (0.5 + Math.random() * 0.5); // Vary lifetime slightly
     }
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     const material = new THREE.PointsMaterial({
-      color,
-      size,
-      sizeAttenuation: true,
-      transparent: true,
-      opacity: 1.0,
+      color, // Particle color
+      size, // Particle size
+      sizeAttenuation: true, // Size reduces with distance
+      transparent: true, // Enable transparency
+      opacity: 1.0, // Initial opacity
     });
     const particles = new THREE.Points(geometry, material);
     sceneRef.current.add(particles);
@@ -295,26 +305,29 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
   // Update particle positions and lifetimes
   const updateParticles = (particles, type, deltaTime) => {
     const positions = particles.mesh.geometry.attributes.position.array;
-    const toRemove = [];
+    const toRemove = []; // Indices of particles to remove
 
+    // Update each particle
     for (let i = 0; i < particles.lifetimes.length; i++) {
       const i3 = i * 3;
-      particles.lifetimes[i] -= deltaTime;
+      particles.lifetimes[i] -= deltaTime; // Decrease lifetime
       if (particles.lifetimes[i] <= 0) {
-        toRemove.push(i);
+        toRemove.push(i); // Mark for removal if lifetime ends
         continue;
       }
 
+      // Update position based on velocity
       positions[i3] += particles.velocities[i3] * deltaTime * 10;
       positions[i3 + 1] += particles.velocities[i3 + 1] * deltaTime * 10;
       positions[i3 + 2] += particles.velocities[i3 + 2] * deltaTime * 10;
 
-      const alpha = particles.lifetimes[i] / particles.initialLifetimes[i];
-      particles.mesh.material.opacity = Math.max(0, alpha);
+      const alpha = particles.lifetimes[i] / particles.initialLifetimes[i]; // Calculate fade
+      particles.mesh.material.opacity = Math.max(0, alpha); // Fade out
     }
 
-    particles.mesh.geometry.attributes.position.needsUpdate = true;
+    particles.mesh.geometry.attributes.position.needsUpdate = true; // Update positions
 
+    // Remove expired particles
     if (toRemove.length > 0) {
       toRemove.reverse().forEach((index) => {
         for (let j = 0; j < 3; j++) {
@@ -329,17 +342,18 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         particles.initialLifetimes.pop();
       });
       if (particles.lifetimes.length === 0) {
-        sceneRef.current.remove(particles.mesh);
+        sceneRef.current.remove(particles.mesh); // Remove particle system if empty
         particles.mesh.geometry.dispose();
         particles.mesh.material.dispose();
         const particleIndex = particlesRef.current[type].indexOf(particles);
         if (particleIndex !== -1) {
-          particlesRef.current[type].splice(particleIndex, 1);
+          particlesRef.current[type].splice(particleIndex, 1); // Remove from ref
         }
       }
     }
   };
 
+  // Main useEffect hook for scene setup and animation
   useEffect(() => {
     // Prevent multiple initializations
     if (!isInitialized.current) {
@@ -348,7 +362,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       // Initialize Three.js scene
       const scene = new THREE.Scene();
       sceneRef.current = scene;
-      scene.background = new THREE.Color(CONFIG.BACKGROUND_COLOR);
+      scene.background = new THREE.Color(CONFIG.BACKGROUND_COLOR); // Set background color
 
       // Set up camera
       const camera = new THREE.PerspectiveCamera(
@@ -358,18 +372,18 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         CONFIG.CAMERA_FAR
       );
       cameraRef.current = camera;
-      camera.position.set(0, CONFIG.SHIP_POSITION_Y + CONFIG.CAMERA_Y_OFFSET, CONFIG.CAMERA_Z_OFFSET);
-      camera.lookAt(0, CONFIG.SHIP_POSITION_Y, 0);
+      camera.position.set(0, CONFIG.SHIP_POSITION_Y + CONFIG.CAMERA_Y_OFFSET, CONFIG.CAMERA_Z_OFFSET); // Initial camera position
+      camera.lookAt(0, CONFIG.SHIP_POSITION_Y, 0); // Look at rocket
 
       // Set up renderer
       const renderer = new THREE.WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.enabled = true; // Enable shadows
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadow type
       rendererRef.current = renderer;
       const mount = mountRef.current;
       if (mount) {
-        mount.appendChild(renderer.domElement);
+        mount.appendChild(renderer.domElement); // Attach renderer to DOM
       }
 
       // Add environment map for reflections
@@ -378,7 +392,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       );
       envTexture.mapping = THREE.EquirectangularReflectionMapping;
       envTexture.colorSpace = THREE.SRGBColorSpace;
-      scene.environment = envTexture;
+      scene.environment = envTexture; // Apply environment map
 
       // Add ambient light
       const ambientLight = new THREE.AmbientLight(
@@ -394,7 +408,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         CONFIG.POINT_LIGHT_DISTANCE,
         CONFIG.POINT_LIGHT_DECAY
       );
-      pointLight.position.set(0, 5, 0);
+      pointLight.position.set(0, 5, 0); // Position above rocket
       scene.add(pointLight);
 
       // Add spotlight for shadows and gloss
@@ -405,8 +419,8 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         CONFIG.SPOT_LIGHT_ANGLE,
         CONFIG.SPOT_LIGHT_PENUMBRA
       );
-      spotLight.position.set(0, CONFIG.SPOT_LIGHT_POSITION_Y, 0);
-      spotLight.castShadow = true;
+      spotLight.position.set(0, CONFIG.SPOT_LIGHT_POSITION_Y, 0); // High above scene
+      spotLight.castShadow = true; // Enable shadow casting
       spotLight.shadow.bias = CONFIG.SHADOW_BIAS;
       spotLight.shadow.mapSize.width = CONFIG.SHADOW_MAP_SIZE;
       spotLight.shadow.mapSize.height = CONFIG.SHADOW_MAP_SIZE;
@@ -426,22 +440,22 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       const starPositions = new Float32Array(CONFIG.STAR_COUNT * 3);
       const starColors = new Float32Array(CONFIG.STAR_COUNT * 3);
       const starMaterials = [
-        new THREE.PointsMaterial({ color: 0xffffff, size: CONFIG.STAR_SIZE, sizeAttenuation: true }),
-        new THREE.PointsMaterial({ color: 0xffff00, size: CONFIG.STAR_SIZE, sizeAttenuation: true }),
-        new THREE.PointsMaterial({ color: 0xff0000, size: CONFIG.STAR_SIZE, sizeAttenuation: true }),
-        new THREE.PointsMaterial({ color: 0x0000ff, size: CONFIG.STAR_SIZE, sizeAttenuation: true }),
+        new THREE.PointsMaterial({ color: 0xffffff, size: CONFIG.STAR_SIZE, sizeAttenuation: true }), // White stars
+        new THREE.PointsMaterial({ color: 0xffff00, size: CONFIG.STAR_SIZE, sizeAttenuation: true }), // Yellow stars
+        new THREE.PointsMaterial({ color: 0xff0000, size: CONFIG.STAR_SIZE, sizeAttenuation: true }), // Red stars
+        new THREE.PointsMaterial({ color: 0x0000ff, size: CONFIG.STAR_SIZE, sizeAttenuation: true }), // Blue stars
       ];
       for (let i = 0; i < CONFIG.STAR_COUNT; i++) {
         const i3 = i * 3;
-        starPositions[i3] = (Math.random() - 0.5) * CONFIG.STAR_RANGE;
-        starPositions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_RANGE;
-        starPositions[i3 + 2] = (Math.random() - 0.5) * CONFIG.STAR_RANGE;
+        starPositions[i3] = (Math.random() - 0.5) * CONFIG.STAR_RANGE; // Random X
+        starPositions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_RANGE; // Random Y
+        starPositions[i3 + 2] = (Math.random() - 0.5) * CONFIG.STAR_RANGE; // Random Z
         const rand = Math.random();
         let color;
-        if (rand < 0.7) color = new THREE.Color(0xffffff);
-        else if (rand < 0.8) color = new THREE.Color(0xffff00);
-        else if (rand < 0.9) color = new THREE.Color(0xff0000);
-        else color = new THREE.Color(0x0000ff);
+        if (rand < 0.7) color = new THREE.Color(0xffffff); // 70% white
+        else if (rand < 0.8) color = new THREE.Color(0xffff00); // 10% yellow
+        else if (rand < 0.9) color = new THREE.Color(0xff0000); // 10% red
+        else color = new THREE.Color(0x0000ff); // 10% blue
         starColors[i3] = color.r;
         starColors[i3 + 1] = color.g;
         starColors[i3 + 2] = color.b;
@@ -479,20 +493,22 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           const box = new THREE.Box3().setFromObject(obj);
           const size = new THREE.Vector3();
           box.getSize(size);
-          console.log("Raw model size:", size);
+          console.log("Raw model size:", size); // Log raw dimensions
 
+          // Scale model to target dimensions
           const scaleX = CONFIG.SHIP_TARGET_WIDTH / size.x;
           const scaleY = CONFIG.SHIP_TARGET_HEIGHT / size.y;
           const scaleZ = CONFIG.SHIP_TARGET_LENGTH / size.z;
           const uniformScale = Math.min(scaleX, scaleY, scaleZ);
           obj.scale.set(uniformScale, uniformScale, uniformScale);
 
+          // Center and position model
           const center = new THREE.Vector3();
           box.getCenter(center);
           obj.position.sub(center.multiplyScalar(uniformScale));
           obj.position.y = CONFIG.SHIP_POSITION_Y;
 
-          obj.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z);
+          obj.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z); // Apply rotation
 
           rocketGroup.add(obj);
           rocketGroup.position.set(0, CONFIG.SHIP_POSITION_Y, 0);
@@ -505,13 +521,14 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
             roadSegmentsRef.current.push(createRoadSegment(i * CONFIG.ROAD_LENGTH));
           }
 
-          modelLoadedRef.current = true;
+          modelLoadedRef.current = true; // Mark model as loaded
         },
-        (xhr) => console.log((xhr.loaded / xhr.total) * 100 + "% loaded"),
-        (error) => console.error("Error loading OBJ model:", error)
+        (xhr) => console.log((xhr.loaded / xhr.total) * 100 + "% loaded"), // Loading progress
+        (error) => console.error("Error loading OBJ model:", error) // Error handling
       );
     }
 
+    // References to scene elements for animation
     const scene = sceneRef.current;
     const camera = cameraRef.current;
     const renderer = rendererRef.current;
@@ -533,8 +550,8 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
 
     // Spawn obstacles (drums or boxes)
     const spawnObstacle = (zBase) => {
-      const xPos = (Math.random() - 0.5) * (CONFIG.ROAD_WIDTH - 2);
-      const type = Math.random() < 0.5 ? "drum" : "box";
+      const xPos = (Math.random() - 0.5) * (CONFIG.ROAD_WIDTH - 2); // Random X position within road
+      const type = Math.random() < 0.5 ? "drum" : "box"; // Randomly choose type
       let obstacle;
 
       if (type === "drum") {
@@ -549,7 +566,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           ...glossyMaterialProps(scene.environment),
         });
         obstacle = new THREE.Mesh(drumGeometry, drumMaterial);
-        obstacle.position.set(xPos, CONFIG.DRUM_HEIGHT / 2, zBase - Math.random() * 50);
+        obstacle.position.set(xPos, CONFIG.DRUM_HEIGHT / 2, zBase - Math.random() * 50); // Random Z offset
       } else {
         const boxGeometry = new THREE.BoxGeometry(CONFIG.BOX_SIZE, CONFIG.BOX_SIZE, CONFIG.BOX_SIZE);
         const boxMaterial = new THREE.MeshPhysicalMaterial({
@@ -560,7 +577,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         obstacle.position.set(xPos, CONFIG.BOX_SIZE / 2, zBase - Math.random() * 50);
       }
 
-      obstacle.rotation.y = Math.random() * Math.PI;
+      obstacle.rotation.y = Math.random() * Math.PI; // Random rotation
       obstacle.castShadow = true;
       scene.add(obstacle);
       obstacles.push(obstacle);
@@ -580,12 +597,12 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
 
     // Spawn coins in a cluster
     const spawnCoins = (zBase) => {
-      const coinCount = Math.floor(Math.random() * 3) + 1;
-      const coinZ = zBase - 60;
+      const coinCount = Math.floor(Math.random() * 3) + 1; // 1-3 coins
+      const coinZ = zBase - 60; // Offset from spawn point
       for (let i = 0; i < coinCount; i++) {
         const coin = new THREE.Mesh(coinGeometry, coinMaterial);
-        coin.position.set((Math.random() - 0.5) * CONFIG.ROAD_WIDTH, 0.5, coinZ - i * 10);
-        coin.rotation.x = Math.PI / 2;
+        coin.position.set((Math.random() - 0.5) * CONFIG.ROAD_WIDTH, 0.5, coinZ - i * 10); // Staggered Z
+        coin.rotation.x = Math.PI / 2; // Stand upright
         coin.castShadow = true;
         scene.add(coin);
         coins.push(coin);
@@ -596,13 +613,14 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     let nextSpawnZ = nextSpawnZRef.current;
     if (gameState === "playing" && obstacles.length === 0 && coins.length === 0 && modelLoadedRef.current) {
       for (let i = 0; i < 3; i++) {
-        spawnObstacle(nextSpawnZ);
-        spawnCoins(nextSpawnZ);
+        spawnObstacle(nextSpawnZ); // Spawn initial obstacles
+        spawnCoins(nextSpawnZ); // Spawn initial coins
         nextSpawnZ -= CONFIG.SPAWN_INTERVAL;
       }
       nextSpawnZRef.current = nextSpawnZ;
     }
 
+    // Control and animation variables
     const controls = controlsRef.current;
     const speed = speedRef.current;
     let blinkCount = 0; // For rocket blink effect on collision
@@ -634,12 +652,13 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     // Animation loop
     let lastTime = performance.now();
     const animate = () => {
-      animationFrameId.current = requestAnimationFrame(animate);
+      animationFrameId.current = requestAnimationFrame(animate); // Request next frame
 
       const currentTime = performance.now();
-      const deltaTime = (currentTime - lastTime) / 1000;
+      const deltaTime = (currentTime - lastTime) / 1000; // Time delta in seconds
       lastTime = currentTime;
 
+      // Update camera position to follow rocket
       const targetPosition = modelLoadedRef.current
         ? rocketGroup.position
         : new THREE.Vector3(0, CONFIG.SHIP_POSITION_Y, 0);
@@ -650,23 +669,25 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       );
       camera.lookAt(targetPosition);
 
+      // Render if model isn’t loaded yet
       if (!modelLoadedRef.current) {
         renderer.render(scene, camera);
         return;
       }
 
+      // Game logic when playing
       if (gameState === "playing") {
         // Handle lateral movement
         if (controls.left) speed.lateral -= CONFIG.ACCELERATION;
         if (controls.right) speed.lateral += CONFIG.ACCELERATION;
         speed.lateral = Math.max(-CONFIG.MAX_LATERAL_SPEED, Math.min(CONFIG.MAX_LATERAL_SPEED, speed.lateral));
-        speed.lateral *= CONFIG.FRICTION;
-        speed.boost = controls.boost ? CONFIG.BOOST_SPEED : Math.max(0, speed.boost - 0.02);
+        speed.lateral *= CONFIG.FRICTION; // Apply friction
+        speed.boost = controls.boost ? CONFIG.BOOST_SPEED : Math.max(0, speed.boost - 0.02); // Boost decay
 
         // Update rocket position
         rocketGroup.position.x += speed.lateral;
         rocketGroup.position.x = Math.max(-CONFIG.LATERAL_BOUNDS, Math.min(CONFIG.LATERAL_BOUNDS, rocketGroup.position.x));
-        rocketGroup.position.z -= speed.forward + speed.boost;
+        rocketGroup.position.z -= speed.forward + speed.boost; // Move forward
 
         // Tilt rocket based on lateral speed
         rocketGroup.rotation.z = -speed.lateral * 0.5;
@@ -712,11 +733,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         const farthestZ = roadSegments[roadSegments.length - 1].road.position.z;
         if (rocketGroup.position.z < farthestZ + segmentLength) {
           const newZ = farthestZ - segmentLength;
-          roadSegments.push(createRoadSegment(newZ));
+          roadSegments.push(createRoadSegment(newZ)); // Add new segment ahead
         }
         const nearestZ = roadSegments[0].road.position.z;
         if (rocketGroup.position.z < nearestZ - segmentLength * 2) {
-          const oldSegment = roadSegments.shift();
+          const oldSegment = roadSegments.shift(); // Remove old segment behind
           scene.remove(oldSegment.road, oldSegment.leftBorder, oldSegment.rightBorder, oldSegment.line);
         }
 
@@ -726,8 +747,9 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           const obstacleBox = new THREE.Box3().setFromObject(obstacle);
           if (rocketBox.intersectsBox(obstacleBox) && blinkCount === 0) {
             scene.remove(obstacle);
-            obstacles.splice(i, 1);
+            obstacles.splice(i, 1); // Remove collided obstacle
 
+            // Generate collision particles
             const collisionPosition = obstacle.position.clone();
             const collisionVelocities = new THREE.Vector3(0, 1, 0);
             const collisionParticles = createParticles(
@@ -740,6 +762,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
             );
             particlesRef.current.collision.push(collisionParticles);
 
+            // Update health and end game if necessary
             setHealth((prev) => {
               const newHealth = prev - 1;
               if (newHealth <= 0) {
@@ -750,6 +773,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
               return newHealth;
             });
           }
+          // Despawn obstacles behind rocket
           if (obstacle.position.z > rocketGroup.position.z + CONFIG.DESPAWN_DISTANCE) {
             scene.remove(obstacle);
             obstacles.splice(i, 1);
@@ -762,9 +786,10 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           if (rocketBox.intersectsBox(coinBox)) {
             coin.visible = false;
             scene.remove(coin);
-            coins.splice(i, 1);
-            setScore((prev) => prev + 10); // Just increase score, no minting here
+            coins.splice(i, 1); // Remove collected coin
+            setScore((prev) => prev + 10); // Increase score
 
+            // Generate coin collection particles
             const coinPosition = coin.position.clone();
             const coinVelocities = new THREE.Vector3(0, 0.5, 0);
             const coinParticles = createParticles(
@@ -777,6 +802,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
             );
             particlesRef.current.coin.push(coinParticles);
           }
+          // Despawn coins behind rocket
           if (coin.position.z > rocketGroup.position.z + CONFIG.DESPAWN_DISTANCE) {
             coin.visible = false;
             scene.remove(coin);
@@ -789,11 +815,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           blinkCount--;
           const isRed = Math.floor(blinkCount / 2) % 2 === 0;
           rocketGroup.traverse((child) => {
-            if (child.isMesh) child.material = isRed ? redMaterial : rocketMaterial;
+            if (child.isMesh) child.material = isRed ? redMaterial : rocketMaterial; // Toggle color
           });
         } else {
           rocketGroup.traverse((child) => {
-            if (child.isMesh) child.material = rocketMaterial;
+            if (child.isMesh) child.material = rocketMaterial; // Reset to normal
           });
         }
 
@@ -817,6 +843,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       );
       if (starField) updateStars(rocketGroup.position.z, starField);
 
+      // Render the scene
       renderer.render(scene, camera);
     };
     animate();
@@ -825,11 +852,14 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); // Stop animation
     };
-  }, [gameState, endGame, setScore, setHealth, health, score]);
+  }, [gameState, endGame, setScore, setHealth, health, score]); // Dependencies for useEffect
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // CONFIG and internal functions (e.g., createRoadSegment) are omitted from dependencies
+  // as they are constant or defined within the component and don’t change between renders
 
-  return <div ref={mountRef} />;
+  return <div ref={mountRef} />; // Render the mount point for Three.js
 }
 
 export default RacingScene;

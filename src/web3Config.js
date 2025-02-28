@@ -1,5 +1,6 @@
 // web3Config.js
-import { createConfig, http, injected } from "wagmi";
+import { createConfig, http } from "wagmi";
+import { injected } from "wagmi/connectors";
 
 const monadTestnet = {
   id: 10143,
@@ -23,17 +24,19 @@ const wagmiConfig = createConfig({
   transports: {
     [monadTestnet.id]: http(),
   },
-  connectors: [injected()],
+  connectors: [
+    injected({ target: "metaMask" }), // MetaMask
+    injected({ target: "phantom" }),  // Phantom
+  ],
   autoConnect: true,
 });
 
-// Switch to Monad Testnet if not already on it
 if (window.ethereum) {
   window.ethereum.request({
     method: "wallet_switchEthereumChain",
-    params: [{ chainId: "0x279f" }], // Hex for 10143
+    params: [{ chainId: "0x279f" }],
   }).catch((error) => {
-    if (error.code === 4902) { // Chain not added
+    if (error.code === 4902) {
       window.ethereum.request({
         method: "wallet_addEthereumChain",
         params: [{
@@ -47,10 +50,5 @@ if (window.ethereum) {
     }
   });
 }
-
-console.log("wagmiConfig initialized:", {
-  chains: wagmiConfig.chains,
-  transports: wagmiConfig.transports,
-});
 
 export { wagmiConfig, monadTestnet as chains };
