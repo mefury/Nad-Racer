@@ -1,52 +1,48 @@
-// web3Config.js
-import { createConfig, http } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { http } from "wagmi";
 
-const monadTestnet = {
+export const monadTestnet = {
   id: 10143,
   name: "Monad Testnet",
   network: "monad-testnet",
   nativeCurrency: {
+    decimals: 18,
     name: "Monad",
     symbol: "MON",
-    decimals: 18,
   },
   rpcUrls: {
     default: { http: ["https://testnet-rpc.monad.xyz"] },
+    public: { http: ["https://testnet-rpc.monad.xyz"] },
   },
   blockExplorers: {
-    default: { name: "MonadExplorer", url: "https://testnet-monadexplorer.com" },
+    default: {
+      name: "MonadExplorer",
+      url: "https://testnet-monadexplorer.com",
+    },
   },
 };
 
-// Updated config with only MetaMask-compatible injected connector
-const wagmiConfig = createConfig({
+export const wagmiConfig = getDefaultConfig({
+  appName: "Nad Racer",
+  projectId: "d36429d3e8e962f876225f24844a4f8f",
   chains: [monadTestnet],
   transports: {
     [monadTestnet.id]: http(),
   },
-  connectors: [
-    injected(), // Generic injected connector that works with MetaMask and compatible wallets
-  ],
-  autoConnect: true,
 });
 
-// Robust chain switching/adding logic
 async function setupNetwork() {
   if (!window.ethereum) {
     console.error("No Ethereum provider detected. Please install MetaMask.");
     return false;
   }
-
   try {
-    // First try to switch to Monad Testnet
     await window.ethereum.request({
       method: "wallet_switchEthereumChain",
       params: [{ chainId: "0x279f" }],
     });
     return true;
   } catch (switchError) {
-    // If chain not added (error code 4902), add it
     if (switchError.code === 4902) {
       try {
         await window.ethereum.request({
@@ -70,7 +66,6 @@ async function setupNetwork() {
   }
 }
 
-// Execute network setup when module loads
 setupNetwork();
 
-export { wagmiConfig, monadTestnet as chains };
+export { monadTestnet as chains };

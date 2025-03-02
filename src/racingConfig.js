@@ -66,12 +66,12 @@ export const CONFIG = {
   SHADOW_MAP_SIZE: 2048, // Resolution of shadow map
 
   // NEW Starfield controllers (replacing old ones)
-  STAR_COUNT: 3000,        // Total number of stars (adjustable: increase for denser starfield)
-  STAR_SPREAD_X: 4000,     // Maximum spread along X-axis (adjustable: how wide the starfield extends)
-  STAR_SPREAD_Y: 4000,     // Maximum spread along Y-axis (adjustable: how tall the starfield extends)
-  STAR_SPREAD_Z: 4000,     // Maximum spread along Z-axis (adjustable: how deep the starfield extends initially)
-  STAR_SIZE: 0.2,          // Base size of star particles (adjustable: affects visibility and style)
-  STAR_DENSITY: 1.0,       // Multiplier for star count (adjustable: scales the number of stars)
+  STAR_COUNT: 12000,       // Much higher initial count
+  STAR_SPREAD_X: 16000,    // Wider spread
+  STAR_SPREAD_Y: 16000,    // Wider spread
+  STAR_SPREAD_Z: 16000,    // Wider spread
+  STAR_SIZE: 0.2,          // Smaller stars for better performance with higher count
+  STAR_DENSITY: 2.0,       // Higher density
   STAR_COLOR: 0xffffff,    // Color of stars (adjustable: use hex values, e.g., 0xff0000 for red)
   STAR_OPACITY: 0.8,       // Transparency of stars (adjustable: 0.0 to 1.0, 1.0 is fully opaque)
   STAR_GLOW: true,         // Whether stars have a glowing effect (adjustable: true/false for additive blending)

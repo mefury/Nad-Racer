@@ -1,31 +1,37 @@
-// RacingScene.js
+// Core React imports
 import React, { useEffect, useRef } from "react";
+// Three.js imports for 3D rendering
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+// Game configuration
 import { CONFIG } from "./racingConfig";
 
+// RacingScene component for 3D gameplay
 function RacingScene({ score, setScore, setHealth, health, endGame, gameState }) {
-  const mountRef = useRef(null);
-  const animationFrameId = useRef(null);
-  const sceneRef = useRef(null);
-  const rocketGroupRef = useRef(null);
-  const obstaclesRef = useRef([]);
-  const coinsRef = useRef([]);
-  const rendererRef = useRef(null);
-  const cameraRef = useRef(null);
-  const controlsRef = useRef({ left: false, right: false, up: false, down: false, boost: false });
-  const speedRef = useRef({ lateral: 0, vertical: 0, boost: 0 });
-  const nextSpawnZRef = useRef(-100);
-  const prevGameStateRef = useRef(null);
+  // Refs for Three.js objects and game state
+  const mountRef = useRef(null); // DOM element for Three.js canvas
+  const animationFrameId = useRef(null); // Animation frame ID
+  const sceneRef = useRef(null); // Three.js scene
+  const rocketGroupRef = useRef(null); // Rocket model group
+  const obstaclesRef = useRef([]); // Array of obstacle objects
+  const coinsRef = useRef([]); // Array of coin objects
+  const rendererRef = useRef(null); // Three.js renderer
+  const cameraRef = useRef(null); // Three.js camera
+  const controlsRef = useRef({ left: false, right: false, up: false, down: false, boost: false }); // Player controls
+  const speedRef = useRef({ lateral: 0, vertical: 0, boost: 0 }); // Movement speeds
+  const nextSpawnZRef = useRef(-100); // Next spawn position on Z-axis
+  const prevGameStateRef = useRef(null); // Previous game state for reset detection
   const particlesRef = useRef({
-    coin: [],
-    collision: [],
+    coin: [], // Coin collection particles
+    collision: [], // Collision particles
   });
-  const modelLoadedRef = useRef(false);
-  const starFieldRef = useRef(null);
-  const skydomeRef = useRef(null);
-  const cameraZPositionRef = useRef(CONFIG.SHIP_POSITION_Z + CONFIG.CAMERA_Z_OFFSET);
+  const modelLoadedRef = useRef(false); // Flag for model loading status
+  const starFieldRef = useRef(null); // Starfield group
+  const skydomeRef = useRef(null); // Skydome mesh
+  const cameraZPositionRef = useRef(CONFIG.SHIP_POSITION_Z + CONFIG.CAMERA_Z_OFFSET); // Initial camera Z position
+  const originalMaterialsRef = useRef(new Map()); // Store original materials for restoration
 
+  // Main effect hook for initializing and updating the scene
   useEffect(() => {
     console.log("useEffect triggered with gameState:", gameState);
 
@@ -37,6 +43,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       console.log("New scene created");
     }
 
+    // Initialize or reuse camera
     const camera = cameraRef.current || new THREE.PerspectiveCamera(
       CONFIG.CAMERA_FOV,
       window.innerWidth / window.innerHeight,
@@ -47,6 +54,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     camera.position.set(0, CONFIG.CAMERA_Y_OFFSET, cameraZPositionRef.current);
     camera.lookAt(0, 0, 0);
 
+    // Initialize or reuse renderer
     const renderer = rendererRef.current || new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
@@ -57,6 +65,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       mount.appendChild(renderer.domElement);
     }
 
+    // Set up environment texture if not already present
     if (!scene.environment) {
       const envTexture = new THREE.TextureLoader().load(
         "https://threejs.org/examples/textures/equirectangular/venice_sunset_1k.hdr"
@@ -66,6 +75,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       scene.environment = envTexture;
     }
 
+    // Add ambient light if not present
     if (!scene.children.some(child => child instanceof THREE.AmbientLight)) {
       const ambientLight = new THREE.AmbientLight(
         CONFIG.AMBIENT_LIGHT_COLOR,
@@ -74,6 +84,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       scene.add(ambientLight);
     }
 
+    // Add directional light if not present
     if (!scene.children.some(child => child instanceof THREE.DirectionalLight)) {
       const dirLight = new THREE.DirectionalLight(
         CONFIG.DIR_LIGHT_COLOR,
@@ -87,18 +98,26 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       scene.add(dirLight);
     }
 
-    // Initialize or reuse starfield
+    // Initialize starfield with improved distribution
     if (!starFieldRef.current) {
       const starField = new THREE.Group();
       const starGeometry = new THREE.BufferGeometry();
-      const starPositions = new Float32Array(CONFIG.STAR_COUNT * CONFIG.STAR_DENSITY * 3);
+      const initialStarCount = CONFIG.STAR_COUNT * CONFIG.STAR_DENSITY;
+      const starPositions = new Float32Array(initialStarCount * 3);
 
-      for (let i = 0; i < CONFIG.STAR_COUNT * CONFIG.STAR_DENSITY; i++) {
+      // Initial star distribution in layers for better depth perception
+      for (let i = 0; i < initialStarCount; i++) {
         const i3 = i * 3;
         starPositions[i3] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_X;
         starPositions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_Y;
-        starPositions[i3 + 2] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_Z;
+        
+        // Distribute stars in layers
+        const layer = Math.floor(i / (initialStarCount / 10)); // 10 layers
+        const baseZ = -CONFIG.CAMERA_FAR * 0.8;
+        const layerDepth = CONFIG.CAMERA_FAR * 1.6 / 10;
+        starPositions[i3 + 2] = baseZ + (layer * layerDepth) + (Math.random() * layerDepth);
       }
+
       starGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
 
       const starMaterial = new THREE.PointsMaterial({
@@ -114,10 +133,6 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       starField.add(stars);
       scene.add(starField);
       starFieldRef.current = starField;
-      console.log("Starfield initialized with", CONFIG.STAR_COUNT * CONFIG.STAR_DENSITY, "stars");
-    } else if (!scene.children.includes(starFieldRef.current)) {
-      scene.add(starFieldRef.current);
-      console.log("Starfield re-added to scene");
     }
 
     // Initialize or reuse skydome
@@ -144,12 +159,14 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       scene.add(skydomeRef.current);
     }
 
+    // Initialize or reuse rocket group
     const rocketGroup = rocketGroupRef.current || new THREE.Group();
     if (!scene.children.includes(rocketGroup)) {
       scene.add(rocketGroup);
     }
     rocketGroupRef.current = rocketGroup;
 
+    // Load rocket model when game starts
     if (!modelLoadedRef.current && gameState === "playing") {
       const gltfLoader = new GLTFLoader();
       console.log("Attempting to load GLTF from:", window.location.origin + "/models/" + CONFIG.SHIP_GLTF_PATH);
@@ -159,16 +176,19 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           console.log("GLTF loaded successfully:", gltf);
           const model = gltf.scene;
 
+          // Configure model properties and store original materials
           model.traverse((child) => {
             if (child.isMesh) {
               child.castShadow = true;
               child.receiveShadow = true;
               if (child.material) {
                 child.material.envMap = scene.environment;
+                originalMaterialsRef.current.set(child, child.material.clone()); // Store original material
               }
             }
           });
 
+          // Scale model to target dimensions
           const box = new THREE.Box3().setFromObject(model);
           const size = new THREE.Vector3();
           box.getSize(size);
@@ -178,6 +198,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           const uniformScale = Math.min(scaleX, scaleY, scaleZ) * CONFIG.SHIP_SCALE;
           model.scale.set(uniformScale, uniformScale, uniformScale);
 
+          // Center and position model
           box.setFromObject(model);
           const center = new THREE.Vector3();
           box.getCenter(center);
@@ -193,6 +214,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           modelLoadedRef.current = true;
           console.log("Model added to scene successfully");
 
+          // Initial spawn of obstacles and coins
           let nextSpawnZ = nextSpawnZRef.current;
           for (let i = 0; i < 3; i++) {
             spawnObstacle(nextSpawnZ);
@@ -203,6 +225,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         })
         .catch((error) => {
           console.error("Error loading GLTF model:", error);
+          // Fallback to placeholder if model fails to load
           const placeholderGeometry = new THREE.BoxGeometry(
             CONFIG.SHIP_TARGET_WIDTH,
             CONFIG.SHIP_TARGET_HEIGHT,
@@ -211,6 +234,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           const placeholderMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
           const placeholder = new THREE.Mesh(placeholderGeometry, placeholderMaterial);
           placeholder.scale.set(CONFIG.SHIP_SCALE, CONFIG.SHIP_SCALE, CONFIG.SHIP_SCALE);
+          originalMaterialsRef.current.set(placeholder, placeholderMaterial.clone()); // Store placeholder material
           rocketGroup.add(placeholder);
           rocketGroup.position.set(CONFIG.SHIP_POSITION_X, CONFIG.SHIP_POSITION_Y, CONFIG.SHIP_POSITION_Z);
           rocketGroup.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z);
@@ -218,6 +242,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
 
           modelLoadedRef.current = true;
 
+          // Initial spawn with placeholder
           let nextSpawnZ = nextSpawnZRef.current;
           for (let i = 0; i < 3; i++) {
             spawnObstacle(nextSpawnZ);
@@ -228,27 +253,32 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         });
     }
 
+    // Reset game state when transitioning to playing
     const resetGameState = () => {
       const scene = sceneRef.current;
       const rocketGroup = rocketGroupRef.current;
-    
+
       console.log("Resetting game state...");
-    
+
+      // Clear obstacles
       obstaclesRef.current.forEach((obstacle) => {
         if (scene.children.includes(obstacle)) scene.remove(obstacle);
       });
       obstaclesRef.current = [];
+      // Clear coins
       coinsRef.current.forEach((coin) => {
         if (scene.children.includes(coin)) scene.remove(coin);
       });
       coinsRef.current = [];
+      // Clear particles
       Object.values(particlesRef.current).forEach((particleList) => {
         particleList.forEach((particle) => {
           if (scene.children.includes(particle.mesh)) scene.remove(particle.mesh);
         });
         particleList.length = 0;
       });
-    
+
+      // Ensure rocket group has a model
       if (!rocketGroup.children.length) {
         const placeholderGeometry = new THREE.BoxGeometry(
           CONFIG.SHIP_TARGET_WIDTH,
@@ -258,23 +288,31 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         const placeholderMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
         const placeholder = new THREE.Mesh(placeholderGeometry, placeholderMaterial);
         placeholder.scale.set(CONFIG.SHIP_SCALE, CONFIG.SHIP_SCALE, CONFIG.SHIP_SCALE);
+        originalMaterialsRef.current.set(placeholder, placeholderMaterial.clone());
         rocketGroup.add(placeholder);
       }
-    
+
+      // Reset rocket position and rotation
       rocketGroup.position.set(CONFIG.SHIP_POSITION_X, CONFIG.SHIP_POSITION_Y, CONFIG.SHIP_POSITION_Z);
       rocketGroup.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z);
-    
+
       rocketGroup.traverse((child) => {
         if (child.isMesh || child.isGroup) {
           child.rotation.set(CONFIG.SHIP_ROTATION_X, CONFIG.SHIP_ROTATION_Y, CONFIG.SHIP_ROTATION_Z);
+          // Restore original material on reset
+          const originalMaterial = originalMaterialsRef.current.get(child);
+          if (originalMaterial) child.material = originalMaterial;
         }
       });
-    
+
+      // Reset movement and controls
       speedRef.current = { lateral: 0, vertical: 0, boost: 0 };
       controlsRef.current = { left: false, right: false, up: false, down: false, boost: false };
-    
+
+      // Reset spawn position
       nextSpawnZRef.current = -CONFIG.SPAWN_INTERVAL;
-    
+
+      // Initial spawn
       let nextSpawnZ = nextSpawnZRef.current;
       for (let i = 0; i < 3; i++) {
         spawnObstacle(nextSpawnZ);
@@ -282,48 +320,79 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         nextSpawnZ -= CONFIG.SPAWN_INTERVAL;
       }
       nextSpawnZRef.current = nextSpawnZ;
-    
+
       cameraZPositionRef.current = CONFIG.SHIP_POSITION_Z + CONFIG.CAMERA_Z_OFFSET;
     };
 
+    // Update starfield positions
     const updateStars = (rocketZ) => {
       const starField = starFieldRef.current;
       if (!starField) return;
 
       const cameraZ = rocketZ + CONFIG.CAMERA_Z_OFFSET;
-      const nearZ = cameraZ - CONFIG.CAMERA_FAR + 100;
-      const farZ = cameraZ + CONFIG.CAMERA_Z_OFFSET;
+      // Increased range to ensure stars are always visible
+      const nearZ = cameraZ - CONFIG.CAMERA_FAR;
+      const farZ = cameraZ + CONFIG.CAMERA_FAR * 0.5;
 
       starField.children.forEach((stars) => {
         const positions = stars.geometry.attributes.position.array;
-        const starCount = CONFIG.STAR_COUNT * CONFIG.STAR_DENSITY;
+        const starCount = positions.length / 3;
 
+        // Track how many stars need recycling
+        let starsToRecycle = 0;
+
+        // First pass: count stars that need recycling
         for (let i = 0; i < starCount; i++) {
           const i3 = i * 3;
           const starZ = positions[i3 + 2];
-
-          if (starZ < nearZ || starZ > farZ) {
-            positions[i3] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_X;
-            positions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_Y;
-            positions[i3 + 2] = nearZ + Math.random() * (farZ - nearZ);
+          if (starZ > farZ || starZ < nearZ) {
+            starsToRecycle++;
           }
         }
-        stars.geometry.attributes.position.needsUpdate = true;
 
-        if (Math.random() < 0.01) {
-          const zs = Array.from({ length: starCount }, (_, i) => positions[i * 3 + 2]);
-          console.log("Star Z range:", Math.min(...zs), Math.max(...zs), "Camera Z:", cameraZ, "Near Z:", nearZ, "Far Z:", farZ);
+        // If we're losing too many stars, create more
+        if (starsToRecycle > starCount * 0.2) { // If more than 20% need recycling
+          const newStarCount = Math.ceil(starCount * 1.5); // Increase by 50%
+          const newPositions = new Float32Array(newStarCount * 3);
+          
+          // Copy existing stars
+          newPositions.set(positions);
+          
+          // Add new stars
+          for (let i = starCount; i < newStarCount; i++) {
+            const i3 = i * 3;
+            newPositions[i3] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_X;
+            newPositions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_Y;
+            newPositions[i3 + 2] = nearZ + Math.random() * (CONFIG.CAMERA_FAR * 0.5);
+          }
+
+          // Replace geometry with new one
+          const newGeometry = new THREE.BufferGeometry();
+          newGeometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+          stars.geometry.dispose();
+          stars.geometry = newGeometry;
+          
+          console.log("Increased star count to:", newStarCount);
         }
-      });
 
-      // Ensure starfield is visible and in scene
-      starField.visible = true;
-      if (!scene.children.includes(starField)) {
-        scene.add(starField);
-        console.log("Starfield forcibly re-added to scene");
-      }
+        // Second pass: recycle stars that are out of range
+        for (let i = 0; i < positions.length / 3; i++) {
+          const i3 = i * 3;
+          const starZ = positions[i3 + 2];
+
+          if (starZ > farZ || starZ < nearZ) {
+            // Place star in front of the camera
+            positions[i3] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_X;
+            positions[i3 + 1] = (Math.random() - 0.5) * CONFIG.STAR_SPREAD_Y;
+            positions[i3 + 2] = nearZ + Math.random() * (CONFIG.CAMERA_FAR * 0.3);
+          }
+        }
+
+        stars.geometry.attributes.position.needsUpdate = true;
+      });
     };
 
+    // Update skydome position and rotation
     const updateSkydome = (zPosition, deltaTime) => {
       const skydome = skydomeRef.current;
       if (!skydome) return;
@@ -334,6 +403,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       skydome.visible = true;
     };
 
+    // Spawn obstacles (stars or asteroids)
     const spawnObstacle = (zBase) => {
       if (Math.random() > CONFIG.OBSTACLE_SPAWN_CHANCE) return;
       const xPos = (Math.random() - 0.5) * CONFIG.SPACE_WIDTH * CONFIG.OBSTACLE_SPAWN_X_RANGE;
@@ -363,6 +433,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       obstaclesRef.current.push(obstacle);
     };
 
+    // Spawn coin rows
     const spawnCoins = (zBase) => {
       if (Math.random() > CONFIG.COIN_SPAWN_CHANCE) return;
       const coinCount = CONFIG.COIN_ROW_COUNTS[Math.floor(Math.random() * CONFIG.COIN_ROW_COUNTS.length)];
@@ -403,6 +474,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       }
     };
 
+    // Create particle effects for coins and collisions
     const createParticles = (count, color, size, lifetime, position, speed, scale) => {
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(count * 3);
@@ -434,6 +506,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       return { mesh: particles, velocities: velocitiesArray, lifetimes, initialLifetimes: [...lifetimes] };
     };
 
+    // Update particle positions and lifetimes
     const updateParticles = (particles, type, deltaTime) => {
       const positions = particles.mesh.geometry.attributes.position.array;
       const toRemove = [];
@@ -481,6 +554,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
       }
     };
 
+    // Reset game state on transition to playing
     if (gameState === "playing" && (prevGameStateRef.current === "start" || prevGameStateRef.current === "gameover") && modelLoadedRef.current) {
       resetGameState();
     }
@@ -490,6 +564,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     const speed = speedRef.current;
     let blinkCount = 0;
 
+    // Keyboard event handlers
     const onKeyDown = (e) => {
       if (gameState !== "playing" || !modelLoadedRef.current) return;
       if (e.key === "ArrowLeft") controls.left = true;
@@ -509,6 +584,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("keyup", onKeyUp);
 
+    // Animation loop
     let lastTime = performance.now();
     const animate = () => {
       animationFrameId.current = requestAnimationFrame(animate);
@@ -550,18 +626,22 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           return;
         }
 
+        // Update lateral movement
         if (controls.left) speed.lateral -= CONFIG.ACCELERATION;
         if (controls.right) speed.lateral += CONFIG.ACCELERATION;
         speed.lateral = Math.max(-CONFIG.MAX_LATERAL_SPEED, Math.min(CONFIG.MAX_LATERAL_SPEED, speed.lateral));
         speed.lateral *= CONFIG.FRICTION;
 
+        // Update vertical movement
         if (controls.up) speed.vertical += CONFIG.ACCELERATION;
         if (controls.down) speed.vertical -= CONFIG.ACCELERATION;
         speed.vertical = Math.max(-CONFIG.MAX_VERTICAL_SPEED, Math.min(CONFIG.MAX_VERTICAL_SPEED, speed.vertical));
         speed.vertical *= CONFIG.FRICTION;
 
+        // Update boost
         speed.boost = controls.boost ? CONFIG.BOOST_SPEED : Math.max(0, speed.boost - 0.02);
 
+        // Apply movement to rocket
         rocketGroup.position.x += speed.lateral;
         rocketGroup.position.x = Math.max(-CONFIG.LATERAL_BOUNDS, Math.min(CONFIG.LATERAL_BOUNDS, rocketGroup.position.x));
         rocketGroup.position.y += speed.vertical;
@@ -571,14 +651,17 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         );
         rocketGroup.position.z -= CONFIG.FORWARD_SPEED + speed.boost;
 
+        // Apply rotation based on movement
         rocketGroup.rotation.z = -speed.lateral * 0.5;
         rocketGroup.rotation.x = speed.vertical * 0.5;
 
+        // Update point light position
         const pointLight = scene.children.find((child) => child instanceof THREE.PointLight);
         if (pointLight) {
           pointLight.position.set(rocketGroup.position.x, rocketGroup.position.y + 5, rocketGroup.position.z);
         }
 
+        // Handle obstacle collisions and despawn
         obstaclesRef.current.forEach((obstacle, i) => {
           obstacle.visible = true;
           const obstaclePos = obstacle.position;
@@ -615,6 +698,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           }
         });
 
+        // Handle coin collection and despawn
         coinsRef.current.forEach((coinGroup, i) => {
           coinGroup.visible = true;
           const coinPos = coinGroup.position;
@@ -644,22 +728,25 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           }
         });
 
+        // Blink effect on collision without changing texture
         if (blinkCount > 0) {
           blinkCount--;
           const isRed = Math.floor(blinkCount / 2) % 2 === 0;
           rocketGroup.traverse((child) => {
-            if (child.isMesh) {
+            if (child.isMesh && child.material) {
               if (isRed) {
-                const redMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-                child.material = redMat;
+                child.material.color.set(0xff0000); // Temporarily change color
               } else {
-                const defaultMat = new THREE.MeshPhongMaterial({ color: 0x9966ff });
-                child.material = defaultMat;
+                const originalMaterial = originalMaterialsRef.current.get(child);
+                if (originalMaterial) {
+                  child.material.color.copy(originalMaterial.color); // Restore original color
+                }
               }
             }
           });
         }
 
+        // Spawn new obstacles and coins
         let nextSpawnZ = nextSpawnZRef.current;
         if (rocketGroup.position.z < nextSpawnZ + CONFIG.SPAWN_INTERVAL) {
           if (obstaclesRef.current.length < CONFIG.OBSTACLE_SPAWN_LIMIT) spawnObstacle(nextSpawnZ);
@@ -668,6 +755,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
           nextSpawnZRef.current = nextSpawnZ;
         }
 
+        // Update particle effects
         ["coin", "collision"].forEach((type) => {
           particlesRef.current[type].forEach((particles) => {
             particles.mesh.visible = true;
@@ -687,22 +775,31 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState })
         });
         updateStars(rocketGroup.position.z);
         updateSkydome(rocketGroup.position.z, deltaTime);
+
+        // Restore original materials on game over
+        rocketGroup.traverse((child) => {
+          if (child.isMesh) {
+            const originalMaterial = originalMaterialsRef.current.get(child);
+            if (originalMaterial) child.material = originalMaterial;
+          }
+        });
       }
 
+      // Render the scene
       renderer.render(scene, camera);
     };
     animate();
 
+    // Cleanup on unmount
     return () => {
       console.log("Cleaning up useEffect...");
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("keyup", onKeyUp);
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-      // Do not dispose scene or renderer here to preserve state
     };
   }, [gameState, endGame, setScore, setHealth, health, score]);
 
-  return <div ref={mountRef} />;
+  return <div ref={mountRef} className="absolute inset-0 w-full h-full" />;
 }
 
 export default RacingScene;
