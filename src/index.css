@@ -1,32 +1,92 @@
 /* index.css */
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap'); /* Titles */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap'); /* General text and buttons */
+
+/* Tailwind setup */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@700&display=swap');
-
-/* Define Monad color palette as CSS variables */
+/* Define configurable CSS variables */
 :root {
+  /* Monad color palette */
   --monad-off-white: rgba(251, 250, 249, 1); /* #FBFAF9 */
   --monad-purple: rgba(131, 110, 249, 1);    /* #836EF9 */
   --monad-blue: rgba(32, 0, 82, 1);          /* #200052 */
   --monad-berry: rgba(160, 5, 93, 1);        /* #A0055D */
   --monad-black: rgba(14, 16, 15, 1);        /* #0E100F */
   --white: rgba(255, 255, 255, 1);           /* #FFFFFF */
+
+  /* Typography */
+  --title-font: "Orbitron", sans-serif;      /* Font for titles (e.g., NAD RACER, GAME OVER) */
+  --text-font: "Roboto", sans-serif;         /* Font for general text and buttons */
+  --title-font-size: 6rem;                   /* Default title size */
+  --subtitle-font-size: 2rem;                /* Default subtitle size */
+  --button-font-size: 1.25rem;               /* Default button size (text-xl) */
+  --text-font-size: 1rem;                    /* Default text size (text-base) */
+
+  /* Colors */
+  --primary-text-color: var(--monad-off-white); /* Default text color */
+  --hover-color: var(--monad-purple);           /* Hover effect color for nav and buttons */
+  --border-color: rgba(251, 250, 249, 0.3);     /* Default border color (monad-off-white with opacity) */
+  --shadow-color: rgba(0, 0, 0, 0.5);           /* Default shadow color */
+
+  /* Transitions */
+  --transition-duration: 300ms;                 /* Default transition duration */
 }
 
+/* Base styles */
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--text-font); /* Apply general text font to body */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--monad-black); /* Set default background to Monad Black */
-  color: var(--monad-off-white); /* Default text color */
+  background-color: var(--monad-black); /* Set default background */
+  color: var(--primary-text-color); /* Set default text color */
 }
 
-code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+/* Title styling */
+.game-title {
+  font-family: var(--title-font); /* Use title font */
+  font-size: var(--title-font-size); /* Configurable size */
+  color: var(--primary-text-color); /* White by default */
+  animation: flare 3s infinite ease-in-out; /* Flare animation */
+}
+
+/* General titles (e.g., Leaderboard, Player Profile) */
+h2, h3 {
+  font-family: var(--title-font); /* Use title font */
+  font-size: var(--subtitle-font-size); /* Configurable size */
+  color: var(--primary-text-color); /* White by default */
+}
+
+/* Buttons */
+button {
+  font-family: var(--text-font); /* Use general text font */
+  font-size: var(--button-font-size); /* Configurable size */
+  color: var(--primary-text-color); /* White by default */
+  transition: color var(--transition-duration) ease; /* Smooth color transition */
+}
+
+/* Hover effect for buttons and nav items */
+button:hover, .hover-effect:hover {
+  color: var(--hover-color); /* Configurable hover color */
+}
+
+/* Keyframe for flare animation */
+@keyframes flare {
+  0% { color: var(--primary-text-color); text-shadow: none; }
+  50% { color: var(--hover-color); text-shadow: 0 0 10px var(--hover-color), 0 0 20px var(--hover-color); }
+  100% { color: var(--primary-text-color); text-shadow: none; }
+}
+
+/* Additional utility classes */
+.tint--var-monad-off-white {
+  filter: brightness(0) saturate(100%) hue-rotate(0deg) invert(99%) sepia(4%) saturate(151%) hue-rotate(315deg) brightness(104%) contrast(95%);
+}
+
+.tint--var-monad-purple {
+  filter: brightness(0) saturate(100%) hue-rotate(0deg) invert(47%) sepia(71%) saturate(3185%) hue-rotate(240deg) brightness(95%) contrast(95%);
 }

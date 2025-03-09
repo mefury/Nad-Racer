@@ -4,14 +4,15 @@
   "private": true,
   "dependencies": {
     "@rainbow-me/rainbowkit": "^2.2.4",
-    "@tanstack/react-query": "5.66.9",
+    "@tanstack/react-query": "^4.36.1",
+    "@wagmi/core": "^1.4.13",
     "ajv": "^8.12.0",
     "ethers": "^5.8.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-scripts": "^5.0.1",
     "three": "^0.173.0",
-    "viem": "^2.23.5",
+    "viem": "^1.21.4",
     "wagmi": "^2.14.12"
   },
   "scripts": {
