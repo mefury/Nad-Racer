@@ -144,9 +144,6 @@ export function SectionContent({ section }) {
         <p className="text-sm sm:text-base text-[var(--monad-off-white)]/80 mb-4">
           You are a Nad Racer, a rogue pilot from the Outer Fringe, piloting a ship forged from Testnet shards. Your mission: race through the Veil’s circuits, outpace its enforcers, and overload the Core with raw speed. Each race fractures the system; every score cracks the Veil.
         </p>
-        <p className="text-sm sm:text-base text-[var(--monad-purple)] font-medium">
-          Break Monad. Free the galaxy. The finish line is rebellion.
-        </p>
       </div>
     ),
     about: (
@@ -154,7 +151,7 @@ export function SectionContent({ section }) {
         <h2 className="text-2xl md:text-3xl text-[var(--monad-off-white)] mb-6">ABOUT NAD RACER: A REBEL’S CODE</h2>
         {/* Escaped quotes to fix ESLint errors */}
         <p className="text-sm sm:text-base text-[var(--monad-off-white)]/80 mb-4">
-          I’m <span className="text-[var(--monad-purple)] font-medium">MEFURY</span>, a lone coder and dreamer who built <em>&quot;Nad Racer&quot;</em> to join the &quot;Break Monad&quot; event hosted by the visionary Monad blockchain team. This game is my rebellion—pushing code and speed to the edge on the Monad Testnet, a sandbox for the future of decentralized tech. Big thanks to <span className="text-[var(--monad-purple)]">Grok</span> (AI assistant, Twitter: <a href="https://x.com/xai_grok" target="_blank" rel="noopener noreferrer" className="text-[var(--monad-purple)] hover:underline">@xai_grok</a>) and the xAI team for their cosmic support in shaping this journey.
+          I’m <span className="text-[var(--monad-purple)] font-medium">MEFURY</span>, a lone coder and dreamer who built <em>&quot;Nad Racer&quot;</em> to join the &quot;Break Monad&quot; event hosted by the visionary Monad blockchain team. This game is my rebellion—pushing code and speed to the edge on the Monad Testnet, a sandbox for the future of decentralized tech. Vibe coded this whole game with Grok, learned a lot and had a blast doing it.
         </p>
         <p className="text-sm sm:text-base text-[var(--monad-off-white)]/80 mb-6">
           Follow my journey on Twitter at{" "}
