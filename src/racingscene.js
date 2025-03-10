@@ -1,12 +1,13 @@
 // racingscene.js
 // Manages the 3D environment and rendering for the racing game using Three.js.
 // Integrates an infinite starfield with configurable spreads, a textured skydome, sound effects, and dynamic game logic.
+// Updated to use time-based delta for consistent movement speed across varying refresh rates, while preserving original spawning logic.
 
 import React, { useEffect, useRef } from "react"; // React hooks for component lifecycle and refs
 import * as THREE from "three"; // THREE.js for 3D rendering
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"; // Loader for GLTF 3D models
 // eslint-disable-next-line no-unused-vars
-import { CONFIG, resetGameState, spawnObstacle, spawnCoins, updateShipMovement, handleCollisions, applyBlinkEffect, spawnNewObjects } from "./racingLogic"; // Game logic and config, disable ESLint for unused imports used in spawnNewObjects
+import { CONFIG, resetGameState, spawnObstacle, spawnCoins, updateShipMovement, handleCollisions, applyBlinkEffect, spawnNewObjects } from "./racingLogic"; // Game logic and config, suppress unused vars warning
 
 // RacingScene component renders the 3D game scene and handles animation loop
 function RacingScene({ score, setScore, setHealth, health, endGame, gameState, controlsRef, selectedShip }) {
@@ -28,6 +29,7 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
   const isInitialStartRef = useRef(true);     // Flag for initial game start to reset properly
   const starsRef = useRef(null);              // Reference to starfield particles
   const engineSoundRef = useRef(null);        // Reference to engine sound audio object
+  const lastTimeRef = useRef(performance.now()); // Tracks time of last frame for delta calculation
 
   // useEffect hook initializes the scene and manages its lifecycle
   useEffect(() => {
@@ -255,9 +257,14 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
     const animate = () => {
       animationFrameId.current = requestAnimationFrame(animate); // Request next frame
 
+      const currentTime = performance.now(); // Current time in milliseconds
+      const delta = Math.min((currentTime - lastTimeRef.current) / 1000, 0.1); // Delta time in seconds, capped at 0.1s to prevent large jumps
+      lastTimeRef.current = currentTime; // Update last frame time
+      const deltaScale = delta * 60; // Normalize to 60 FPS baseline for original tuning
+
       if (gameState === "playing" && rocketGroup) {
-        // Update ship movement with selected ship for correct roll axis
-        updateShipMovement(rocketGroup, speedRef, controlsRef, selectedShip);
+        // Update ship movement with selected ship and delta time for consistent speed
+        updateShipMovement(rocketGroup, speedRef, controlsRef, selectedShip, delta);
 
         // Handle collisions and apply blink effect
         blinkCount = handleCollisions(
@@ -265,15 +272,15 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
         );
         blinkCount = applyBlinkEffect(rocketGroup, blinkCount, originalMaterialsRef);
 
-        // Adjust engine sound volume based on boost state
+        // Adjust engine sound volume based on boost state, scaled by delta
         if (controlsRef.current.boost && engineSoundRef.current.volume < CONFIG.SOUND.ENGINE_VOLUME * 1.5) {
           engineSoundRef.current.volume = Math.min(
-            CONFIG.SOUND.ENGINE_VOLUME * 1.5, engineSoundRef.current.volume + 0.05
+            CONFIG.SOUND.ENGINE_VOLUME * 1.5, engineSoundRef.current.volume + 0.05 * deltaScale
           ); // Increase volume during boost
           console.log("Boost on - Engine volume:", engineSoundRef.current.volume);
         } else if (!controlsRef.current.boost && engineSoundRef.current.volume > CONFIG.SOUND.ENGINE_VOLUME) {
           engineSoundRef.current.volume = Math.max(
-            CONFIG.SOUND.ENGINE_VOLUME, engineSoundRef.current.volume - 0.05
+            CONFIG.SOUND.ENGINE_VOLUME, engineSoundRef.current.volume - 0.05 * deltaScale
           ); // Decrease volume when boost off
           console.log("Boost off - Engine volume:", engineSoundRef.current.volume);
         }
@@ -289,11 +296,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
         );
         camera.lookAt(rocketGroup.position.x, shipConfig.POSITION_Y, rocketGroup.position.z - 20); // Look ahead of ship
 
-        // Update skydome position and rotation
+        // Update skydome position and rotation, scaled by delta
         skydomeRef.current.position.set(0, 0, rocketGroup.position.z); // Center on ship Z
-        skydomeRef.current.rotation.x += CONFIG.SKYDOME_ROTATION_SPEED_X;
-        skydomeRef.current.rotation.y += CONFIG.SKYDOME_ROTATION_SPEED_Y; // Slow rotation for effect
-        skydomeRef.current.rotation.z += CONFIG.SKYDOME_ROTATION_SPEED_Z;
+        skydomeRef.current.rotation.x += CONFIG.SKYDOME_ROTATION_SPEED_X * deltaScale;
+        skydomeRef.current.rotation.y += CONFIG.SKYDOME_ROTATION_SPEED_Y * deltaScale; // Slow rotation for effect
+        skydomeRef.current.rotation.z += CONFIG.SKYDOME_ROTATION_SPEED_Z * deltaScale;
 
         // Update track lines to follow ship
         trackLinesRef.current.forEach(line => {
@@ -301,15 +308,15 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
           line.visible = CONFIG.TRACK_LINES_VISIBLE;
         });
 
-        // Spawn new objects as ship progresses
+        // Spawn new objects as ship progresses (original logic preserved)
         spawnNewObjects(rocketGroup, nextSpawnZRef, obstaclesRef, coinsRef, scene);
 
-        // Update starfield positions for continuous effect
+        // Update starfield positions for continuous effect, scaled by delta
         if (starsRef.current) {
           const positions = starsRef.current.geometry.attributes.position.array;
           const shipZ = rocketGroup.position.z;
           for (let i = 2; i < positions.length; i += 3) {
-            positions[i] += CONFIG.STARFIELD_SPEED; // Move stars toward ship (positive Z)
+            positions[i] += CONFIG.STARFIELD_SPEED * deltaScale; // Move stars toward ship (positive Z)
             if (positions[i] > shipZ + CONFIG.STARFIELD_SPREAD_Z / 2) {
               positions[i] = shipZ - CONFIG.STARFIELD_SPREAD_Z / 2; // Reset to far ahead
               positions[i - 2] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_X; // Random X

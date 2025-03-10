@@ -12,7 +12,7 @@ import { Navbar, SectionContent, Footer } from "./components";
 import { gameContractAddress, gameContractABI } from "./contractint";
 
 // Constants for game configuration
-const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button bypassing wallet connection
+const SHOW_DIRECT_PLAY_BUTTON = true; // Option to show a direct play button bypassing wallet connection
 const queryClient = new QueryClient(); // Query client for React Query
 const APP_VERSION = "1.1.0"; // Version of the app displayed in footer
 
@@ -384,7 +384,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
       {/* Ship selection screen */}
       {gameState === "shipselect" && (
         <div className="absolute inset-0 flex flex-col items-center justify-start z-10 p-6 pb-32 md:pb-6 overflow-y-auto">
-          <h1 className="text-4xl md:text-5xl text-[var(--monad-off-white)] mb-8 mt-4">SELECT YOUR SHIP</h1>
+          <h1 className="text-4xl md:text-5xl text-[var(--monad-off-white)] mb-8 mt-4 md:mt-20">SELECT YOUR SHIP</h1>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
             {SHIP_OPTIONS.map((ship) => (
               <div
@@ -531,7 +531,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           <div className="flex flex-col gap-4 justify-center items-center">
             {isConnected && score > 0 && (
               <button
-                className="px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-purple)] text-[var(--monad-purple)] rounded-lg hover:bg-[var(--monad-purple)]/20 transition-all duration-300 w-full max-w-xs"
+                className="px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-purple   border-[var(--monad-purple)] text-[var(--monad-purple)] rounded-lg hover:bg-[var(--monad-purple)]/20 transition-all duration-300 w-full max-w-xs"
                 onClick={claimPoints}
               >
                 Claim Points

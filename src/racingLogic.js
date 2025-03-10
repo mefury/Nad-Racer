@@ -1,6 +1,7 @@
 // racingLogic.js
 // Core game logic for a 3D racing game, managing ship movement, object spawning, collisions, and updates.
 // Enhanced with configurable starfield spreads, detailed skydome controls, and multiple ship options with dedicated configurations.
+// Updated to use time-based delta for consistent movement speed across varying refresh rates, while preserving original spawning logic.
 
 import * as THREE from "three"; // Import THREE.js for 3D operations
 
@@ -37,7 +38,7 @@ export const CONFIG = {
       SCALE: 5,                                // Base scaling factor applied to the model
       COLLISION_RADIUS: 5.0,                   // Radius for collision detection with obstacles and coins
       POSITION_X: 0.0,                         // Initial X position of the ship (centered)
-      POSITION_Y: 1,                         // Initial Y position (height above track)
+      POSITION_Y: 1,                           // Initial Y position (height above track)
       POSITION_Z: 0,                           // Initial Z position (starting point)
       ROTATION_X: 0,                           // Initial X rotation in radians (no tilt)
       ROTATION_Y: -Math.PI / 2,                // Initial Y rotation to face forward (negative Z from positive X, -90 degrees)
@@ -47,11 +48,11 @@ export const CONFIG = {
   },
 
   // --- Movement and Physics ---
-  MAX_LATERAL_SPEED: 0.7,        // Maximum speed the ship can move left or right
-  FORWARD_SPEED: 1.7,              // Constant forward movement speed along Z-axis
-  BOOST_SPEED: 2.5,              // Additional speed when boost is activated
-  ACCELERATION: 0.075,           // Rate of lateral acceleration per frame
-  FRICTION: 0.88,                // Friction factor to slow lateral movement (0-1, lower = more friction)
+  MAX_LATERAL_SPEED: 0.7,        // Maximum speed the ship can move left or right per second
+  FORWARD_SPEED: 2.2,            // Constant forward movement speed along Z-axis per second
+  BOOST_SPEED: 2.5,              // Additional speed when boost is activated per second
+  ACCELERATION: 0.075,           // Rate of lateral acceleration per frame (scaled by delta)
+  FRICTION: 0.88,                // Friction factor to slow lateral movement per frame (0-1, lower = more friction)
   LATERAL_BOUNDS: 0,             // Calculated later as half of TRACK_WIDTH to limit lateral movement
   ROTATION_SENSITIVITY: 0.5,     // Sensitivity of ship roll based on lateral speed
   DISABLE_Z_MOVEMENT: false,     // Debug option to disable forward Z movement if true
@@ -87,9 +88,9 @@ export const CONFIG = {
   SKYDOME_OPACITY: 1.0,          // Opacity of skydome material (1.0 = fully opaque)
   SKYDOME_EMISSIVE: 0x000000,    // Emissive color of skydome (none by default)
   SKYDOME_EMISSIVE_INTENSITY: 0.0, // Intensity of emissive effect (none by default)
-  SKYDOME_ROTATION_SPEED_X: 0.0, // Rotation speed around X-axis (none)
-  SKYDOME_ROTATION_SPEED_Y: 0.001, // Slow rotation around Y-axis for dynamic effect
-  SKYDOME_ROTATION_SPEED_Z: 0.0, // Rotation speed around Z-axis (none)
+  SKYDOME_ROTATION_SPEED_X: 0.0, // Rotation speed around X-axis per second (none)
+  SKYDOME_ROTATION_SPEED_Y: 0.001, // Slow rotation around Y-axis per second for dynamic effect
+  SKYDOME_ROTATION_SPEED_Z: 0.0, // Rotation speed around Z-axis per second (none)
   SKYDOME_SCALE_X: 1.0,          // Scale factor for skydome along X-axis
   SKYDOME_SCALE_Y: 1.0,          // Scale factor for skydome along Y-axis
   SKYDOME_SCALE_Z: 1.0,          // Scale factor for skydome along Z-axis
@@ -125,7 +126,7 @@ export const CONFIG = {
   STARFIELD_COUNT: 30000,        // Total number of stars in the starfield
   STARFIELD_SIZE: 1.5,           // Size of each star particle
   STARFIELD_COLOR: 0xffffff,     // Color of stars (white)
-  STARFIELD_SPEED: 1.5,          // Speed at which stars move toward the ship
+  STARFIELD_SPEED: 1.5,          // Speed at which stars move toward the ship per second
   STARFIELD_SPREAD_X: 1000,      // Width of starfield distribution along X-axis
   STARFIELD_SPREAD_Y: 1000,      // Height of starfield distribution along Y-axis
   STARFIELD_SPREAD_Z: 20000,     // Depth of starfield distribution along Z-axis
@@ -235,26 +236,28 @@ export const spawnCoins = (zBase, scene, coinsRef) => {
   console.log(`Spawned ${coinCount} coins at (${xPos}, ${spawnZ})`);
 };
 
-// Updates ship movement based on controls, applying roll on ship-specific axis
-export const updateShipMovement = (rocketGroup, speedRef, controlsRef, selectedShip) => {
+// Updates ship movement based on controls, applying roll on ship-specific axis, scaled by delta time
+export const updateShipMovement = (rocketGroup, speedRef, controlsRef, selectedShip, delta) => {
+  const deltaScale = delta * 60; // Normalize to 60 FPS baseline for original tuning
+
   if (controlsRef.current.left && !controlsRef.current.right) {
-    speedRef.current.lateral -= CONFIG.ACCELERATION; // Accelerate left
+    speedRef.current.lateral -= CONFIG.ACCELERATION * deltaScale; // Accelerate left, scaled by delta
   } else if (controlsRef.current.right && !controlsRef.current.left) {
-    speedRef.current.lateral += CONFIG.ACCELERATION; // Accelerate right
+    speedRef.current.lateral += CONFIG.ACCELERATION * deltaScale; // Accelerate right, scaled by delta
   }
   speedRef.current.lateral = Math.max(-CONFIG.MAX_LATERAL_SPEED, Math.min(CONFIG.MAX_LATERAL_SPEED, speedRef.current.lateral));
-  speedRef.current.lateral *= CONFIG.FRICTION;
-  speedRef.current.boost = controlsRef.current.boost ? CONFIG.BOOST_SPEED : Math.max(0, speedRef.current.boost - 0.02);
+  speedRef.current.lateral *= Math.pow(CONFIG.FRICTION, deltaScale); // Apply friction exponentially, scaled by delta
+  speedRef.current.boost = controlsRef.current.boost ? CONFIG.BOOST_SPEED : Math.max(0, speedRef.current.boost - 0.02 * deltaScale); // Boost decay scaled by delta
 
-  const newX = rocketGroup.position.x + speedRef.current.lateral;
+  const newX = rocketGroup.position.x + speedRef.current.lateral * deltaScale; // Lateral movement scaled by delta
   rocketGroup.position.x = Math.max(-CONFIG.LATERAL_BOUNDS, Math.min(CONFIG.LATERAL_BOUNDS, newX));
   
   if (!CONFIG.DISABLE_Z_MOVEMENT) {
-    rocketGroup.position.z -= CONFIG.FORWARD_SPEED + speedRef.current.boost;
+    rocketGroup.position.z -= (CONFIG.FORWARD_SPEED + speedRef.current.boost) * deltaScale; // Forward movement scaled by delta
   }
 
   const shipConfig = CONFIG.SHIPS[selectedShip];
-  const rollValue = -speedRef.current.lateral * CONFIG.ROTATION_SENSITIVITY; // Negative lateral = tilt left/down
+  const rollValue = -speedRef.current.lateral * CONFIG.ROTATION_SENSITIVITY; // Roll based on lateral speed (not time-dependent)
   if (shipConfig.ROLL_AXIS === "z") {
     rocketGroup.rotation.z = rollValue; // Roll around Z-axis for both ships
   } else if (shipConfig.ROLL_AXIS === "x") {
@@ -311,15 +314,15 @@ export const handleCollisions = (rocketGroup, obstaclesRef, coinsRef, scene, set
 // Applies a blinking effect to the ship on collision
 export const applyBlinkEffect = (rocketGroup, blinkCount, originalMaterialsRef) => {
   if (blinkCount > 0) {
-    blinkCount--;
+    blinkCount--; // Decrement blink counter (frame-based, not time-based for simplicity)
     const isRed = Math.floor(blinkCount / 2) % 2 === 0;
     rocketGroup.traverse((child) => {
       if (child.isMesh && child.material) {
         if (isRed) {
-          child.material.color.set(0xff0000);
+          child.material.color.set(0xff0000); // Red during blink
         } else {
           const originalMaterial = originalMaterialsRef.current.get(child);
-          if (originalMaterial) child.material.color.copy(originalMaterial.color);
+          if (originalMaterial) child.material.color.copy(originalMaterial.color); // Restore original color
         }
       }
     });
@@ -327,10 +330,10 @@ export const applyBlinkEffect = (rocketGroup, blinkCount, originalMaterialsRef) 
   return blinkCount;
 };
 
-// Spawns new obstacles and coins as the ship progresses
+// Spawns new obstacles and coins as the ship progresses (original logic preserved)
 export const spawnNewObjects = (rocketGroup, nextSpawnZRef, obstaclesRef, coinsRef, scene) => {
   let nextSpawnZ = nextSpawnZRef.current;
-  if (rocketGroup.position.z < nextSpawnZ) {
+  if (rocketGroup.position.z < nextSpawnZ) { // Original condition based on position
     spawnObstacle(nextSpawnZ, scene, obstaclesRef);
     spawnCoins(nextSpawnZ, scene, coinsRef);
     nextSpawnZ -= CONFIG.SPAWN_INTERVAL;
