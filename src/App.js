@@ -12,7 +12,7 @@ import { Navbar, SectionContent, Footer } from "./components";
 import { gameContractAddress, gameContractABI } from "./contractint";
 
 // Constants for game configuration
-const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button bypassing wallet connection
+const SHOW_DIRECT_PLAY_BUTTON = true; // Option to show a direct play button bypassing wallet connection
 const queryClient = new QueryClient(); // Query client for React Query
 const APP_VERSION = "1.1.0"; // Version of the app displayed in footer
 
