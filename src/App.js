@@ -12,35 +12,37 @@ import { Navbar, SectionContent, Footer } from "./components";
 import { gameContractAddress, gameContractABI } from "./contractint";
 
 // Constants for game configuration
-const SHOW_DIRECT_PLAY_BUTTON = true;
-const queryClient = new QueryClient();
-const APP_VERSION = "1.1.0";
+const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button bypassing wallet connection
+const queryClient = new QueryClient(); // Query client for React Query
+const APP_VERSION = "1.1.0"; // Version of the app displayed in footer
 
-// Sound configuration
+// Sound configuration for background music and engine effects
 const SOUND_CONFIG = {
-  GAMEBG_VOLUME: 0.2,
-  ENGINE_VOLUME: 0.1,
-  ENGINE_BOOST_MULTIPLIER: 2.5,
+  GAMEBG_VOLUME: 0.2, // Volume for background music
+  ENGINE_VOLUME: 0.1, // Base volume for engine sound
+  ENGINE_BOOST_MULTIPLIER: 2.5, // Multiplier for engine sound when boosting
 };
 
-// Ship options
+// Ship options for selection screen
 const SHIP_OPTIONS = [
-  { id: "SHIP_1", name: "Nad 105", preview: "/models/ship1.png", isFree: true },
-  { id: "SHIP_2", name: "Bumble Ship", preview: "/models/ship2.png", isFree: false, npCost: 10000 * 10**18 },
+  { id: "SHIP_1", name: "Nad 105", preview: "/models/ship1.png", isFree: true }, // Free ship
+  { id: "SHIP_2", name: "Bumble Ship", preview: "/models/ship2.png", isFree: false, npCost: 10000 * 10**18 }, // NFT-locked ship
 ];
 
-// Game state hook
+// Custom hook to manage game state
 function useGameState() {
-  const [gameState, setGameState] = useState("start");
-  const [score, setScore] = useState(0);
-  const [health, setHealth] = useState(3);
-  const [selectedShip, setSelectedShip] = useState("SHIP_1");
+  const [gameState, setGameState] = useState("start"); // Tracks current game state (start, shipselect, playing, gameover)
+  const [score, setScore] = useState(0); // Current score during gameplay
+  const [health, setHealth] = useState(3); // Player health during gameplay
+  const [selectedShip, setSelectedShip] = useState("SHIP_1"); // Selected ship ID
 
+  // Start game by moving to ship selection (triggered by ConnectedContent)
   const startGame = useCallback(() => {
     console.log("Proceeding to ship selection...");
     setGameState("shipselect");
   }, []);
 
+  // Begin gameplay with selected ship
   const startPlaying = useCallback(() => {
     console.log("Starting game with ship:", selectedShip);
     setGameState("playing");
@@ -48,12 +50,14 @@ function useGameState() {
     setHealth(3);
   }, [selectedShip]);
 
+  // End game and transition to gameover state
   const endGame = useCallback((finalScore) => {
     console.log("Game over with score:", finalScore);
-    setScore(finalScore);
+    setScore(finalScore); // Set final score for claiming
     setGameState("gameover");
   }, []);
 
+  // Reset game state to initial values
   const resetGame = useCallback(() => {
     console.log("Resetting to main menu...");
     setGameState("start");
@@ -62,9 +66,11 @@ function useGameState() {
     setSelectedShip("SHIP_1");
   }, []);
 
+  // Memoized setters for performance
   const memoizedSetScore = useCallback((newScoreFunc) => setScore(newScoreFunc), []);
   const memoizedSetHealth = useCallback((newHealthFunc) => setHealth(newHealthFunc), []);
 
+  // Log state changes for debugging
   useEffect(() => {
     console.log("Game State:", { gameState, score, health, selectedShip });
   }, [gameState, score, health, selectedShip]);
@@ -84,6 +90,7 @@ function useGameState() {
   };
 }
 
+// Powered by Monad logo component
 export function PoweredByMonad() {
   return (
     <div className="flex items-center gap-2 text-[var(--monad-off-white)] opacity-80 text-xs sm:text-sm">
@@ -93,6 +100,7 @@ export function PoweredByMonad() {
   );
 }
 
+// ConnectedContent Component - Handles wallet connection and game start
 function ConnectedContent({ startGame, finalScore, resetGame }) {
   const { isConnected } = useAccount();
   const { writeContract } = useWriteContract();
@@ -139,6 +147,7 @@ function ConnectedContent({ startGame, finalScore, resetGame }) {
   );
 }
 
+// ProfileInfo Component - Consistent width with homepage elements
 function ProfileInfo() {
   const { address, isConnected } = useAccount();
   const { data: playerData } = useReadContract({
@@ -150,8 +159,10 @@ function ProfileInfo() {
     chainId: 10143,
   });
 
+  // If not connected or no player data, hide the component
   if (!isConnected || !playerData) return null;
 
+  // Format NP tokens and high score for display
   const npTokens = playerData[0] ? (Number(playerData[0]) / 10**18).toFixed(2) : "0.00";
   const highScore = playerData[1] ? playerData[1].toString() : "0";
 
@@ -159,10 +170,12 @@ function ProfileInfo() {
     <div className="w-full py-3 px-6 md:py-6 md:px-8 rounded-xl border border-[var(--monad-off-white)]/30">
       <h2 className="text-xl text-[var(--monad-off-white)] mb-4 text-center">PLAYER INFO</h2>
       <div className="text-sm sm:text-base text-[var(--monad-off-white)] space-y-2">
+        {/* NP Token Balance */}
         <p className="flex justify-between">
           <span className="font-bold">NP Balance:</span>
           <span>{npTokens}</span>
         </p>
+        {/* Highest Score */}
         <p className="flex justify-between">
           <span className="font-bold">Highest Score:</span>
           <span>{highScore}</span>
@@ -172,23 +185,27 @@ function ProfileInfo() {
   );
 }
 
+// Child component to handle game content and Web3 logic
 function GameContent({ gameState, score, health, selectedShip, setSelectedShip, startGame, startPlaying, endGame, resetGame, setScore, setHealth }) {
-  const controlsRef = useRef({ left: false, right: false, boost: false });
-  const gameBgSoundRef = useRef(null);
-  const engineSoundRef = useRef(null);
-  const [currentSection, setCurrentSection] = useState("play");
+  const controlsRef = useRef({ left: false, right: false, boost: false }); // Ref for mobile controls
+  const gameBgSoundRef = useRef(null); // Ref for background music
+  const engineSoundRef = useRef(null); // Ref for engine sound
+  const [currentSection, setCurrentSection] = useState("play"); // Current section in main menu
 
+  // Get the connected wallet address
   const { address, isConnected } = useAccount();
 
+  // Fetch on-chain player data (totalPoints, highestScore)
   const { data: playerData } = useReadContract({
     address: gameContractAddress,
     abi: gameContractABI,
     functionName: "getPlayerData",
     args: [address],
     enabled: !!isConnected && !!address,
-    chainId: 10143,
+    chainId: 10143, // Monad Testnet
   });
 
+  // Check if player owns Ship 2 NFT
   const { data: ownsShip2 } = useReadContract({
     address: gameContractAddress,
     abi: gameContractABI,
@@ -198,10 +215,12 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     chainId: 10143,
   });
 
+  // Extract on-chain data
   const onChainHighScore = playerData ? Number(playerData[1]) : 0;
   const npTokens = playerData ? Number(playerData[0]) : 0;
   const hasShip2 = ownsShip2 || false;
 
+  // Mint Ship 2 NFT
   const { writeContract } = useWriteContract();
   const mintShip2NFT = () => {
     writeContract({
@@ -212,6 +231,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     });
   };
 
+  // Claim points on game over
   const claimPoints = () => {
     if (isConnected && score > 0) {
       writeContract({
@@ -223,13 +243,14 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
       }, {
         onSuccess: () => {
           console.log("Points claimed:", score);
-          resetGame();
+          resetGame(); // Reset after claiming
         },
         onError: (error) => console.error("Claim points failed:", error),
       });
     }
   };
 
+  // Initialize audio elements
   useEffect(() => {
     if (!gameBgSoundRef.current) {
       gameBgSoundRef.current = new Audio("/sounds/gamebg.mp3");
@@ -245,6 +266,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     }
   }, []);
 
+  // Manage audio playback based on game state
   useEffect(() => {
     if (gameState === "playing") {
       if (gameBgSoundRef.current && gameBgSoundRef.current.paused) gameBgSoundRef.current.play().catch((e) => console.error("Background music error:", e));
@@ -267,6 +289,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     }
   }, [gameState, controlsRef.current.boost]);
 
+  // Reset controls when not playing
   useEffect(() => {
     if (gameState !== "playing") {
       controlsRef.current = { left: false, right: false, boost: false };
@@ -274,6 +297,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     }
   }, [gameState]);
 
+  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       if (gameBgSoundRef.current) gameBgSoundRef.current.pause();
@@ -281,6 +305,7 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
     };
   }, []);
 
+  // Determine health bar color
   const getHealthColor = (health) => {
     if (health === 3) return "bg-green-500";
     if (health === 2) return "bg-orange-500";
@@ -289,7 +314,10 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
 
   return (
     <>
+      {/* Background scene for visual effect */}
       <BackgroundScene />
+      
+      {/* Racing scene rendered during gameplay */}
       {gameState === "playing" && (
         <RacingScene
           key="racing-scene"
@@ -303,18 +331,26 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           selectedShip={selectedShip}
         />
       )}
+      
+      {/* Navigation bar for main menu */}
       <Navbar
         gameState={gameState}
         setCurrentSection={setCurrentSection}
         currentSection={currentSection}
       />
+      
+      {/* Start screen with centered title and play button */}
       {gameState === "start" && (
         <>
+          {/* Full-screen container with centered content */}
           <div className="absolute inset-0 z-10 flex flex-col min-h-screen">
+            {/* Centered content */}
             <div className="flex-grow flex flex-col justify-center items-center p-6">
               {currentSection === "play" && (
                 <div className="flex flex-col items-center w-11/12 max-w-md space-y-8">
+                  {/* Game title centered */}
                   <h1 className="game-title text-5xl md:text-6xl text-[var(--monad-off-white)] font-bold">NAD RACER</h1>
+                  {/* Play buttons section */}
                   <div className="flex flex-col items-center gap-6 w-full">
                     <ConnectedContent startGame={startGame} />
                     {SHOW_DIRECT_PLAY_BUTTON && (
@@ -326,21 +362,26 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
                       </button>
                     )}
                   </div>
+                  {/* ProfileInfo with subtle spacing */}
                   <div className="w-full mt-4 md:mt-16">
                     <ProfileInfo />
                   </div>
                 </div>
               )}
+              {/* Other sections content */}
               {currentSection !== "play" && (
                 <SectionContent section={currentSection} />
               )}
             </div>
           </div>
+          {/* Wallet connect button in top right */}
           <div className="absolute top-4 right-4 z-20">
             <ConnectButton />
           </div>
         </>
       )}
+      
+      {/* Ship selection screen */}
       {gameState === "shipselect" && (
         <div className="absolute inset-0 flex flex-col items-center justify-start z-10 p-6 pb-32 md:pb-6 overflow-y-auto">
           <h1 className="text-4xl md:text-5xl text-[var(--monad-off-white)] mb-8 mt-4">SELECT YOUR SHIP</h1>
@@ -388,6 +429,8 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           </button>
         </div>
       )}
+      
+      {/* In-game HUD */}
       {gameState === "playing" && (
         <div className="absolute top-4 left-4 bg-transparent p-4 rounded-xl border border-[var(--monad-off-white)]/30 z-10">
           <div className="flex items-center gap-6">
@@ -410,6 +453,8 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           </div>
         </div>
       )}
+      
+      {/* Mobile controls during gameplay */}
       {gameState === "playing" && (
         <div className="fixed bottom-12 left-1/2 transform -translate-x-1/2 z-50 flex justify-between w-11/12 max-w-md md:hidden touch-none">
           <button
@@ -465,6 +510,8 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           </button>
         </div>
       )}
+      
+      {/* Game over screen */}
       {gameState === "gameover" && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent p-8 rounded-2xl border border-[var(--monad-off-white)]/30 z-10 w-full max-w-md">
           <h1 className="text-5xl md:text-6xl text-[var(--monad-off-white)] mb-6 text-center font-bold">GAME OVER</h1>
@@ -494,6 +541,8 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
           </div>
         </div>
       )}
+      
+      {/* Footer with version and Monad branding */}
       <Footer appVersion={APP_VERSION} gameState={gameState} />
     </>
   );
