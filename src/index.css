@@ -45,6 +45,22 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--monad-black); /* Set default background */
   color: var(--primary-text-color); /* Set default text color */
+  
+  /* Disable text selection globally */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  
+  /* Prevent dragging of elements */
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  
+  /* Set default cursor */
+  cursor: default;
 }
 
 /* Title styling */
@@ -89,4 +105,59 @@ button:hover, .hover-effect:hover {
 
 .tint--var-monad-purple {
   filter: brightness(0) saturate(100%) hue-rotate(0deg) invert(47%) sepia(71%) saturate(3185%) hue-rotate(240deg) brightness(95%) contrast(95%);
+}
+
+/* Custom scrollbar for leaderboard */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(14, 16, 15, 0.2);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--monad-purple);
+  border-radius: 10px;
+  opacity: 0.5;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--monad-purple);
+  opacity: 0.8;
+}
+
+/* For Firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--monad-purple) rgba(14, 16, 15, 0.2);
+}
+
+/* Allow text selection in specific elements if needed */
+.selectable-text {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+/* Ensure input fields remain selectable/editable */
+input, textarea {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+
+/* Make RainbowKit wallet addresses selectable */
+[data-testid="rk-account-button"] span, 
+[data-testid="rk-account-modal"] span,
+button[data-testid="rk-wallet-option"] span {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }

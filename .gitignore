@@ -1,4 +1,5 @@
 node_modules/
 build/
+backend/
 .env
 .DS_Store

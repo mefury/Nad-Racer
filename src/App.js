@@ -1,94 +1,70 @@
 "use client";
 
-import React, { useState, useCallback, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import RacingScene from "./racingscene";
 import BackgroundScene from "./background";
-import { WagmiProvider } from "wagmi";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider, ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { wagmiConfig } from "./web3Config";
-import { Navbar, SectionContent, Footer } from "./components";
-import { gameContractAddress, gameContractABI } from "./contractint";
+import { useAccount } from "wagmi";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { 
+  Navbar, 
+  Footer, 
+  GameOverScreen, 
+  StoryPage,
+  AboutPage,
+  LeaderboardPage 
+} from "./components";
+import { processTokens, checkPlayerRegistration, registerPlayer, saveScore, getLeaderboard } from "./backendService";
+import { audioSystem } from './audioSystem';
+
+// Enable or disable console logs globally - set to false for production
+const DEBUG = false;
+
+// Setup console log control - this affects all files that use console methods
+(() => {
+  if (!DEBUG) {
+    // Store original console methods
+    const originalConsole = {
+      log: console.log,
+      warn: console.warn,
+      error: console.error,
+      info: console.info,
+      debug: console.debug
+    };
+    
+    // Override console methods to be no-ops (do nothing)
+    console.log = console.warn = console.info = console.debug = () => {};
+    
+    // Keep error logging for critical errors, comment next line to disable all logs completely
+    // console.error = originalConsole.error;
+    console.error = () => {};
+    
+    // Method to temporarily restore logging if needed for debugging
+    window.enableLogs = () => {
+      console.log = originalConsole.log;
+      console.warn = originalConsole.warn;
+      console.error = originalConsole.error;
+      console.info = originalConsole.info;
+      console.debug = originalConsole.debug;
+      console.log('Console logging restored temporarily');
+    };
+    
+    // Method to disable logs again
+    window.disableLogs = () => {
+      console.log = console.warn = console.info = console.debug = () => {};
+      console.error = () => {};
+    };
+  }
+})();
 
 // Constants for game configuration
+const APP_VERSION = "1.2.0 Beta"; // Version of the app displayed in footer
 const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button bypassing wallet connection
-const queryClient = new QueryClient(); // Query client for React Query
-const APP_VERSION = "1.1.0"; // Version of the app displayed in footer
-
-// Sound configuration for background music and engine effects
-const SOUND_CONFIG = {
-  GAMEBG_VOLUME: 0.2, // Volume for background music
-  ENGINE_VOLUME: 0.1, // Base volume for engine sound
-  ENGINE_BOOST_MULTIPLIER: 2.5, // Multiplier for engine sound when boosting
-};
 
 // Ship options for selection screen
 const SHIP_OPTIONS = [
-  { id: "SHIP_1", name: "Nad 105", preview: "/models/ship1.png", isFree: true }, // Free ship
+  { id: "SHIP_1", name: "Speeder", preview: "/models/ship1.png", isFree: true },
   { id: "SHIP_2", name: "Bumble Ship", preview: "/models/ship2.png", isFree: false, npCost: 10000 * 10**18 }, // NFT-locked ship
 ];
-
-// Custom hook to manage game state
-function useGameState() {
-  const [gameState, setGameState] = useState("start"); // Tracks current game state (start, shipselect, playing, gameover)
-  const [score, setScore] = useState(0); // Current score during gameplay
-  const [health, setHealth] = useState(3); // Player health during gameplay
-  const [selectedShip, setSelectedShip] = useState("SHIP_1"); // Selected ship ID
-
-  // Start game by moving to ship selection (triggered by ConnectedContent)
-  const startGame = useCallback(() => {
-    console.log("Proceeding to ship selection...");
-    setGameState("shipselect");
-  }, []);
-
-  // Begin gameplay with selected ship
-  const startPlaying = useCallback(() => {
-    console.log("Starting game with ship:", selectedShip);
-    setGameState("playing");
-    setScore(0);
-    setHealth(3);
-  }, [selectedShip]);
-
-  // End game and transition to gameover state
-  const endGame = useCallback((finalScore) => {
-    console.log("Game over with score:", finalScore);
-    setScore(finalScore); // Set final score for claiming
-    setGameState("gameover");
-  }, []);
-
-  // Reset game state to initial values
-  const resetGame = useCallback(() => {
-    console.log("Resetting to main menu...");
-    setGameState("start");
-    setScore(0);
-    setHealth(3);
-    setSelectedShip("SHIP_1");
-  }, []);
-
-  // Memoized setters for performance
-  const memoizedSetScore = useCallback((newScoreFunc) => setScore(newScoreFunc), []);
-  const memoizedSetHealth = useCallback((newHealthFunc) => setHealth(newHealthFunc), []);
-
-  // Log state changes for debugging
-  useEffect(() => {
-    console.log("Game State:", { gameState, score, health, selectedShip });
-  }, [gameState, score, health, selectedShip]);
-
-  return {
-    gameState,
-    score,
-    health,
-    selectedShip,
-    setSelectedShip,
-    startGame,
-    startPlaying,
-    endGame,
-    resetGame,
-    setScore: memoizedSetScore,
-    setHealth: memoizedSetHealth,
-  };
-}
 
 // Powered by Monad logo component
 export function PoweredByMonad() {
@@ -100,30 +76,110 @@ export function PoweredByMonad() {
   );
 }
 
-// ConnectedContent Component - Handles wallet connection and game start
-function ConnectedContent({ startGame, finalScore, resetGame }) {
-  const { isConnected } = useAccount();
-  const { writeContract } = useWriteContract();
+// Registration component for new users
+function RegistrationForm({ walletAddress, onRegistrationComplete }) {
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleStartGame = () => {
-    if (isConnected) {
-      writeContract({
-        address: gameContractAddress,
-        abi: gameContractABI,
-        functionName: "startGame",
-        chainId: 10143,
-      }, {
-        onSuccess: () => {
-          console.log("Game started on-chain");
-          startGame();
-        },
-        onError: (error) => console.error("Start game failed:", error),
-      });
-    } else {
-      startGame();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!username || username.length < 3 || username.length > 20) {
+      setError("Username must be between 3 and 20 characters");
+      return;
+    }
+    
+    setIsLoading(true);
+    setError("");
+    
+    try {
+      const result = await registerPlayer(walletAddress, username);
+      
+      if (result.success) {
+        onRegistrationComplete(result.player);
+      } else {
+        setError(result.error || "Registration failed. Please try again.");
+      }
+    } catch (error) {
+      setError("An error occurred during registration.");
+    } finally {
+      setIsLoading(false);
     }
   };
+  
+  return (
+    <div className="bg-black/50 p-6 rounded-xl border border-[var(--monad-off-white)]/30 w-full max-w-md">
+      <h2 className="text-2xl text-[var(--monad-off-white)] mb-4">Welcome to NAD RACER</h2>
+      <p className="text-[var(--monad-off-white)] mb-6">Choose a username to get started:</p>
+      
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Username (3-20 characters)"
+          className="w-full p-3 bg-black/30 text-[var(--monad-off-white)] border border-[var(--monad-off-white)]/30 rounded-lg mb-4"
+        />
+        
+        {error && <p className="text-red-500 mb-4">{error}</p>}
+        
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full px-6 py-3 bg-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-lg hover:bg-[var(--monad-purple)]/80 transition-all duration-300"
+        >
+          {isLoading ? "Registering..." : "Register"}
+        </button>
+      </form>
+    </div>
+  );
+}
 
+// ConnectedContent Component - Handles wallet connection and game start
+function ConnectedContent({ startGame, finalScore, resetGame }) {
+  const { isConnected, address } = useAccount();
+  // eslint-disable-next-line no-unused-vars
+  const [playerData, setPlayerData] = useState(null);
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check if player is registered when wallet connects
+  useEffect(() => {
+    const checkRegistration = async () => {
+      if (isConnected && address) {
+        setIsLoading(true);
+        try {
+          const result = await checkPlayerRegistration(address);
+          setIsRegistered(result.registered);
+          if (result.registered) {
+            setPlayerData(result.player);
+          }
+        } catch (error) {
+          console.error("Failed to check registration:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setIsRegistered(false);
+        setPlayerData(null);
+        setIsLoading(false);
+      }
+    };
+
+    checkRegistration();
+  }, [isConnected, address]);
+
+  const handleRegistrationComplete = (player) => {
+    setIsRegistered(true);
+    setPlayerData(player);
+  };
+
+  const handleStartGame = () => {
+      startGame();
+  };
+
+  // Show back to menu button after game ends
   if (finalScore !== undefined) {
     return (
       <button
@@ -135,175 +191,512 @@ function ConnectedContent({ startGame, finalScore, resetGame }) {
     );
   }
 
-  return isConnected ? (
-    <button
-      className="px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-off-white)]/30 text-[var(--monad-off-white)] rounded-lg hover:text-[var(--monad-purple)] transition-all duration-300 w-full max-w-xs"
-      onClick={handleStartGame}
-    >
-      Play
-    </button>
-  ) : (
-    <ConnectButton />
-  );
+  if (isConnected) {
+    if (isLoading) {
+      return <div className="text-[var(--monad-off-white)] text-xl">Loading...</div>;
+    }
+    
+    if (!isRegistered) {
+      return <RegistrationForm walletAddress={address} onRegistrationComplete={handleRegistrationComplete} />;
+    }
+    
+    return (
+      <button
+        className="px-12 py-4 text-xl md:text-2xl bg-black/40 border-2 border-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-lg hover:bg-[var(--monad-purple)]/20 hover:shadow-[0_0_15px_rgba(131,110,249,0.6)] transition-all duration-300 w-full max-w-xs font-[var(--title-font)]"
+        onClick={handleStartGame}
+      >
+        PLAY
+      </button>
+    );
+  }
+
+  return null;
 }
 
-// ProfileInfo Component - Consistent width with homepage elements
+// ProfileInfo Component - Displays player info from backend
 function ProfileInfo() {
-  const { address, isConnected } = useAccount();
-  const { data: playerData } = useReadContract({
-    address: gameContractAddress,
-    abi: gameContractABI,
-    functionName: "getPlayerData",
-    args: [address],
-    enabled: !!address && isConnected,
-    chainId: 10143,
-  });
+  const { isConnected, address } = useAccount();
+  // eslint-disable-next-line no-unused-vars
+  const [playerData, setPlayerData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [mintStatus, setMintStatus] = useState(null); // null, 'success', 'error'
+  const [statusMessage, setStatusMessage] = useState('');
 
-  // If not connected or no player data, hide the component
-  if (!isConnected || !playerData) return null;
+  // Function to fetch player data from backend
+  const fetchPlayerData = async () => {
+    if (isConnected && address) {
+      setIsLoading(true);
+      try {
+        const result = await checkPlayerRegistration(address);
+        if (result.registered) {
+          setPlayerData(result.player);
+        } else {
+          setPlayerData(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch player data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    } else {
+      setPlayerData(null);
+      setIsLoading(false);
+    }
+  };
 
-  // Format NP tokens and high score for display
-  const npTokens = playerData[0] ? (Number(playerData[0]) / 10**18).toFixed(2) : "0.00";
-  const highScore = playerData[1] ? playerData[1].toString() : "0";
+  // Fetch player data when wallet status changes
+  useEffect(() => {
+    fetchPlayerData();
+  }, [isConnected, address]);
+
+  if (!isConnected) {
+    return (
+      <div className="bg-black/50 p-4 rounded-xl border border-[var(--monad-off-white)]/30">
+        <p className="text-center text-[var(--monad-off-white)] text-lg">Connect wallet to see your stats</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-black/50 p-4 rounded-xl border border-[var(--monad-off-white)]/30">
+        <p className="text-center text-[var(--monad-off-white)] text-lg">Loading player data...</p>
+      </div>
+    );
+  }
+
+  if (!playerData) {
+    return (
+      <div className="bg-black/50 p-4 rounded-xl border border-[var(--monad-off-white)]/30">
+        <p className="text-center text-[var(--monad-off-white)] text-lg">No player data found</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full py-3 px-6 md:py-6 md:px-8 rounded-xl border border-[var(--monad-off-white)]/30">
-      <h2 className="text-xl text-[var(--monad-off-white)] mb-4 text-center">PLAYER INFO</h2>
-      <div className="text-sm sm:text-base text-[var(--monad-off-white)] space-y-2">
-        {/* NP Token Balance */}
-        <p className="flex justify-between">
-          <span className="font-bold">NP Balance:</span>
-          <span>{npTokens}</span>
-        </p>
-        {/* Highest Score */}
-        <p className="flex justify-between">
-          <span className="font-bold">Highest Score:</span>
-          <span>{highScore}</span>
-        </p>
+    <div className="bg-black/60 p-5 rounded-xl border border-[var(--monad-purple)]/40 shadow-[0_0_10px_rgba(131,110,249,0.2)]">
+      <div className="mb-4">
+        <h3 className="text-[var(--monad-purple)] text-lg font-bold">PILOT INFO</h3>
+        <p className="text-[var(--monad-off-white)] text-xl">{playerData.username}</p>
       </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <p className="text-[var(--monad-off-white)] text-sm">NP BALANCE</p>
+          <p className="text-[var(--monad-purple)] text-xl font-bold">{playerData.totalPoints}</p>
+        </div>
+        <div>
+          <p className="text-[var(--monad-off-white)] text-sm">HIGH SCORE</p>
+          <p className="text-[var(--monad-purple)] text-xl font-bold">{playerData.highestScore}</p>
+        </div>
+      </div>
+      
+      {/* Token mint test button removed */}
     </div>
   );
 }
 
-// Child component to handle game content and Web3 logic
-function GameContent({ gameState, score, health, selectedShip, setSelectedShip, startGame, startPlaying, endGame, resetGame, setScore, setHealth }) {
-  const controlsRef = useRef({ left: false, right: false, boost: false }); // Ref for mobile controls
-  const gameBgSoundRef = useRef(null); // Ref for background music
-  const engineSoundRef = useRef(null); // Ref for engine sound
-  const [currentSection, setCurrentSection] = useState("play"); // Current section in main menu
-
-  // Get the connected wallet address
-  const { address, isConnected } = useAccount();
-
-  // Fetch on-chain player data (totalPoints, highestScore)
-  const { data: playerData } = useReadContract({
-    address: gameContractAddress,
-    abi: gameContractABI,
-    functionName: "getPlayerData",
-    args: [address],
-    enabled: !!isConnected && !!address,
-    chainId: 10143, // Monad Testnet
-  });
-
-  // Check if player owns Ship 2 NFT
-  const { data: ownsShip2 } = useReadContract({
-    address: gameContractAddress,
-    abi: gameContractABI,
-    functionName: "ownsShip2NFT",
-    args: [address],
-    enabled: !!isConnected && !!address,
-    chainId: 10143,
-  });
-
-  // Extract on-chain data
-  const onChainHighScore = playerData ? Number(playerData[1]) : 0;
-  const npTokens = playerData ? Number(playerData[0]) : 0;
-  const hasShip2 = ownsShip2 || false;
-
-  // Mint Ship 2 NFT
-  const { writeContract } = useWriteContract();
-  const mintShip2NFT = () => {
-    writeContract({
-      address: gameContractAddress,
-      abi: gameContractABI,
-      functionName: "mintShip2NFT",
-      chainId: 10143,
+// GameContent Component - Contains all game screens and logic
+function GameContent({ gameState, score, health, selectedShip, setSelectedShip, startGame, startPlaying, endGame, resetGame, setScore, setHealth, currentSection }) {
+  const { isConnected, address } = useAccount();
+  const [collectedCoins, setCollectedCoins] = useState(0);
+  const [leaderboardData, setLeaderboardData] = useState([]);
+  const [playerData, setPlayerData] = useState(null);
+  
+  // Fetch player data when component mounts if connected
+  useEffect(() => {
+    if (isConnected && address) {
+      const fetchPlayerData = async () => {
+        try {
+          const result = await checkPlayerRegistration(address);
+          if (result.registered) {
+            setPlayerData(result.player);
+          }
+        } catch (error) {
+          console.error("Failed to fetch player data:", error);
+        }
+      };
+      fetchPlayerData();
+    }
+  }, [isConnected, address]);
+  
+  // Handle coin collection during gameplay
+  const handleCoinCollection = async (coinValue = 1) => {
+    setCollectedCoins(prevCoins => {
+      const newValue = prevCoins + coinValue;
+      console.log(`🪙 GameContent: Collected coins: ${newValue}`);
+      return newValue;
     });
-  };
-
-  // Claim points on game over
-  const claimPoints = () => {
-    if (isConnected && score > 0) {
-      writeContract({
-        address: gameContractAddress,
-        abi: gameContractABI,
-        functionName: "claimPoints",
-        args: [score],
-        chainId: 10143,
-      }, {
-        onSuccess: () => {
-          console.log("Points claimed:", score);
-          resetGame(); // Reset after claiming
-        },
-        onError: (error) => console.error("Claim points failed:", error),
-      });
-    }
-  };
-
-  // Initialize audio elements
-  useEffect(() => {
-    if (!gameBgSoundRef.current) {
-      gameBgSoundRef.current = new Audio("/sounds/gamebg.mp3");
-      gameBgSoundRef.current.loop = true;
-      gameBgSoundRef.current.volume = SOUND_CONFIG.GAMEBG_VOLUME;
-      console.log("Game background music initialized");
-    }
-    if (!engineSoundRef.current) {
-      engineSoundRef.current = new Audio("/sounds/engine.mp3");
-      engineSoundRef.current.loop = true;
-      engineSoundRef.current.volume = SOUND_CONFIG.ENGINE_VOLUME;
-      console.log("Engine sound initialized");
-    }
-  }, []);
-
-  // Manage audio playback based on game state
-  useEffect(() => {
-    if (gameState === "playing") {
-      if (gameBgSoundRef.current && gameBgSoundRef.current.paused) gameBgSoundRef.current.play().catch((e) => console.error("Background music error:", e));
-      if (engineSoundRef.current && engineSoundRef.current.paused) engineSoundRef.current.play().catch((e) => console.error("Engine sound error:", e));
+    
+    if (isConnected && address) {
+      try {
+        console.log(`💰 GameContent: Processing ${coinValue} token(s) for wallet: ${address}`);
+        const result = await processTokens(address, coinValue);
+        console.log(`✅ GameContent: Token processing result:`, result);
+      } catch (error) {
+        console.error("❌ GameContent: Failed to process token:", error);
+      }
     } else {
-      if (gameBgSoundRef.current && !gameBgSoundRef.current.paused) {
-        gameBgSoundRef.current.pause();
-        gameBgSoundRef.current.currentTime = 0;
-      }
-      if (engineSoundRef.current && !engineSoundRef.current.paused) {
-        engineSoundRef.current.pause();
-        engineSoundRef.current.currentTime = 0;
-      }
+      console.warn("⚠️ GameContent: No wallet connected when collecting coin");
     }
-    if (gameState === "playing" && engineSoundRef.current) {
-      const targetVolume = controlsRef.current.boost
-        ? SOUND_CONFIG.ENGINE_VOLUME * SOUND_CONFIG.ENGINE_BOOST_MULTIPLIER
-        : SOUND_CONFIG.ENGINE_VOLUME;
-      engineSoundRef.current.volume = Math.min(1, Math.max(0, engineSoundRef.current.volume + (targetVolume - engineSoundRef.current.volume) * 0.1));
-    }
-  }, [gameState, controlsRef.current.boost]);
+  };
 
-  // Reset controls when not playing
-  useEffect(() => {
-    if (gameState !== "playing") {
-      controlsRef.current = { left: false, right: false, boost: false };
-      console.log("Controls reset:", controlsRef.current);
+  // Save score at the end of the game
+  const saveGameScore = async () => {
+    if (isConnected && address && score > 0) {
+      try {
+        const result = await saveScore(address, score);
+        console.log("Score saved:", result);
+      } catch (error) {
+        console.error("Failed to save score:", error);
+      }
     }
-  }, [gameState]);
+  };
+  
+  // Leaderboard section
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
 
-  // Cleanup audio on unmount
+  const fetchLeaderboard = async () => {
+    setLeaderboardLoading(true);
+    try {
+      const data = await getLeaderboard();
+      setLeaderboard(data);
+    } catch (error) {
+      console.error("Failed to fetch leaderboard:", error);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  };
+
+  // Fetch leaderboard when section changes
   useEffect(() => {
+    if (gameState === "start" && currentSection === "leaderboard") {
+      fetchLeaderboard();
+    }
+  }, [gameState, currentSection]);
+
+  // Game over screen
+  if (gameState === "gameover") {
+    // Save score when game ends
+    useEffect(() => {
+      saveGameScore();
+    }, []);
+    
+    return (
+      <GameOverScreen 
+        score={score} 
+        collectedCoins={collectedCoins} 
+        resetGame={resetGame} 
+        playerData={playerData} 
+      />
+    );
+  }
+
+  // Story section
+  if (gameState === "start" && currentSection === "story") {
+    return <StoryPage />;
+  }
+
+  // About section
+  if (gameState === "start" && currentSection === "about") {
+    return <AboutPage />;
+  }
+
+  // Leaderboard section
+  if (gameState === "start" && currentSection === "leaderboard") {
+    return <LeaderboardPage leaderboard={leaderboard} leaderboardLoading={leaderboardLoading} />;
+  }
+
+  return null;
+}
+
+// Component to store wallet address in window object for token processing
+function WalletAddressListener() {
+  const { isConnected, address } = useAccount();
+
+  // Update window.walletAddress when connection status changes
+  useEffect(() => {
+    if (isConnected && address) {
+      console.log("🔑 WalletAddressListener: Setting wallet address:", address);
+      window.walletAddress = address;
+    } else {
+      console.log("❌ WalletAddressListener: Clearing wallet address");
+      window.walletAddress = null;
+    }
+  }, [isConnected, address]);
+
+  return null;
+}
+
+function App() {
+  const [gameState, setGameState] = useState("start"); // Tracks current game state
+  const [score, setScore] = useState(0); // Current score during gameplay
+  const [health, setHealth] = useState(3); // Player health during gameplay
+  const [selectedShip, setSelectedShip] = useState("SHIP_1"); // Selected ship ID
+  const controlsRef = useRef({ left: false, right: false, boost: false });
+  const [currentSection, setCurrentSection] = useState("play");
+  // eslint-disable-next-line no-unused-vars
+  const [collectedCoins, setCollectedCoins] = useState(0);
+  // eslint-disable-next-line no-unused-vars
+  const [lastTxStatus, setLastTxStatus] = useState(null);
+  const [txHistory, setTxHistory] = useState([]);
+  const [audioInitialized, setAudioInitialized] = useState(false);
+  const [fps, setFps] = useState(0); // Add FPS state
+  const fpsRef = useRef({ frames: 0, lastTime: performance.now() }); // Add FPS tracking ref
+  
+  // Initialize audio system
+  useEffect(() => {
+    const initAudio = async () => {
+      try {
+        const result = await audioSystem.init();
+        setAudioInitialized(result);
+        console.log('🎵 Audio initialization result:', result);
+      } catch (error) {
+        console.error('❌ Audio initialization error:', error);
+      }
+    };
+
+    initAudio();
+    
     return () => {
-      if (gameBgSoundRef.current) gameBgSoundRef.current.pause();
-      if (engineSoundRef.current) engineSoundRef.current.pause();
+      audioSystem.dispose();
     };
   }, []);
+
+  // Handle game state changes for audio
+  useEffect(() => {
+    const handleGameAudio = async () => {
+      if (gameState === "playing") {
+        console.log('🎵 Starting game audio for state:', gameState);
+        
+        try {
+          // Ensure user interaction is handled
+          await audioSystem.handleUserInteraction();
+          
+          // Ensure audio is initialized
+          if (!audioInitialized) {
+            const result = await audioSystem.init();
+            setAudioInitialized(result);
+          }
+          
+          // Ensure audio context is resumed
+          if (audioSystem.audioContext?.state === 'suspended') {
+            await audioSystem.audioContext.resume();
+          }
+          
+          // Stop any existing sounds first
+          audioSystem.stopBackgroundMusic();
+          audioSystem.stopEngineSound();
+          
+          // Small delay to ensure cleanup is complete
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Start background music first
+          audioSystem.startBackgroundMusic();
+          
+          // Small delay before starting engine sound
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Start engine sound
+          audioSystem.startEngineSound();
+          
+          // Debug log active sources
+          console.log('🎵 Active sources after start:', Array.from(audioSystem.activeSources.keys()));
+          
+        } catch (error) {
+          console.error('❌ Error managing game audio:', error);
+        }
+      } else if (gameState !== "playing") {
+        console.log('🎵 Stopping game audio for state:', gameState);
+        audioSystem.stopBackgroundMusic();
+        audioSystem.stopEngineSound();
+      }
+    };
+
+    handleGameAudio();
+  }, [gameState, audioInitialized]);
+
+  // Add FPS tracking effect
+  useEffect(() => {
+    if (gameState !== "playing") return;
+    
+    let animationFrameId;
+    const updateFPS = () => {
+      const now = performance.now();
+      const delta = now - fpsRef.current.lastTime;
+      
+      fpsRef.current.frames++;
+      
+      if (delta >= 1000) {
+        setFps(Math.round((fpsRef.current.frames * 1000) / delta));
+        fpsRef.current.frames = 0;
+        fpsRef.current.lastTime = now;
+      }
+      
+      animationFrameId = requestAnimationFrame(updateFPS);
+    };
+    
+    animationFrameId = requestAnimationFrame(updateFPS);
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [gameState]);
+
+  // Modify startPlaying to handle audio initialization
+  const startPlaying = async () => {
+    try {
+      console.log("Game starting: Playing state");
+      
+      // Reset game state
+      setScore(0);
+      setHealth(3);
+      setCollectedCoins(0);
+      
+      // Reset controls
+      if (controlsRef.current) {
+        controlsRef.current.left = false;
+        controlsRef.current.right = false;
+        controlsRef.current.boost = false;
+      }
+
+      // Handle user interaction and ensure audio is ready
+      await audioSystem.handleUserInteraction();
+      
+      if (!audioInitialized) {
+        const result = await audioSystem.init();
+        setAudioInitialized(result);
+      }
+
+      // Resume audio context if needed
+      if (audioSystem.audioContext?.state === 'suspended') {
+        await audioSystem.audioContext.resume();
+      }
+
+      // Set game state to trigger audio
+      setGameState("playing");
+      console.log("Game started: Playing state with ship:", selectedShip);
+    } catch (error) {
+      console.error('❌ Error starting game:', error);
+    }
+  };
+
+  // Add click handler for ship selection screen
+  const handleShipSelect = async (shipId) => {
+    // Ensure audio is initialized on ship selection click
+    await audioSystem.handleUserInteraction();
+    setSelectedShip(shipId);
+  };
+
+  // Keep the testAudio function for internal use
+  const testAudio = async () => {
+    console.log('🎵 Testing audio system...');
+    audioSystem.debugSoundBuffers();
+    
+    // Test all sounds
+    audioSystem.playCoinSound();
+    setTimeout(() => audioSystem.playCrashSound(), 500);
+    setTimeout(() => {
+      audioSystem.startBackgroundMusic();
+      audioSystem.startEngineSound();
+    }, 1000);
+    
+    // Stop looping sounds after 3 seconds
+    setTimeout(() => {
+      audioSystem.stopBackgroundMusic();
+      audioSystem.stopEngineSound();
+    }, 4000);
+  };
+
+  // Modify handleGameCoinCollection to include both collection and minting notifications
+  const handleGameCoinCollection = async (coinValue) => {
+    console.log("🎮 App: Coin collected in racing scene, value:", coinValue);
+    setCollectedCoins(prevCoins => prevCoins + coinValue);
+    
+    // Play coin sound
+    audioSystem.playCoinSound();
+    
+    // Show immediate collection notification
+    setTxHistory(prevHistory => [
+      {
+        id: Date.now(),
+        success: true,
+        message: `Collected ${coinValue} NP`,
+        type: 'collection',
+        timestamp: Date.now()
+      },
+      ...prevHistory
+    ].slice(0, 5));
+    
+    const walletToUse = window.walletAddress;
+    console.log("🎮 App: Using wallet address for minting:", walletToUse);
+    
+    if (walletToUse) {
+      try {
+        console.log("🎮 App: Processing token for wallet:", walletToUse);
+        const result = await processTokens(walletToUse, coinValue);
+        console.log("🎮 App: Token processing result:", result);
+        
+        // Show minting notification
+        if (result.success) {
+          setTxHistory(prevHistory => [
+            {
+              id: Date.now() + 1,
+              success: true,
+              message: `Minting ${coinValue} NP`,
+              type: 'minting',
+              timestamp: Date.now()
+            },
+            ...prevHistory
+          ].slice(0, 5));
+        }
+      } catch (error) {
+        console.error("🎮 App: Failed to process token:", error);
+        // Show error notification
+        setTxHistory(prevHistory => [
+          {
+            id: Date.now() + 1,
+            success: false,
+            message: "Minting failed",
+            type: 'error',
+            timestamp: Date.now()
+          },
+          ...prevHistory
+        ].slice(0, 5));
+      }
+    }
+  };
+
+  // Modify handleObstacleHit to include sound
+  const handleObstacleHit = () => {
+    console.log("🎮 App: Obstacle hit in racing scene");
+    audioSystem.playCrashSound();
+  };
+
+  // Game state functions
+  const startGame = () => {
+    setGameState("shipselect");
+    console.log("Game starting: Ship selection screen");
+  };
+
+  const endGame = () => {
+    setGameState("gameover");
+    console.log("Game over with score:", score);
+  };
+
+  const resetGame = () => {
+    setGameState("start");
+    setCurrentSection("play");
+    
+    // Reset controls
+    if (controlsRef.current) {
+      controlsRef.current.left = false;
+      controlsRef.current.right = false;
+      controlsRef.current.boost = false;
+    }
+    
+    console.log("Game reset to start screen");
+  };
 
   // Determine health bar color
   const getHealthColor = (health) => {
@@ -313,148 +706,325 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
   };
 
   return (
-    <>
-      {/* Background scene for visual effect */}
+    <div className={`relative w-screen h-screen ${gameState === "playing" ? "overflow-hidden" : "overflow-auto"} bg-[var(--monad-black)] text-[var(--monad-off-white)]`}>
+      <WalletAddressListener />
       <BackgroundScene />
       
-      {/* Racing scene rendered during gameplay */}
+      {/* Racing scene during gameplay */}
       {gameState === "playing" && (
         <RacingScene
-          key="racing-scene"
           score={score}
           setScore={setScore}
-          health={health}
           setHealth={setHealth}
+          health={health}
           endGame={endGame}
           gameState={gameState}
           controlsRef={controlsRef}
           selectedShip={selectedShip}
+          onCoinCollect={handleGameCoinCollection}
+          onObstacleHit={handleObstacleHit}
         />
       )}
       
-      {/* Navigation bar for main menu */}
       <Navbar
         gameState={gameState}
         setCurrentSection={setCurrentSection}
         currentSection={currentSection}
       />
       
-      {/* Start screen with centered title and play button */}
+      {/* Start screen */}
       {gameState === "start" && (
-        <>
-          {/* Full-screen container with centered content */}
+        <React.Fragment>
           <div className="absolute inset-0 z-10 flex flex-col min-h-screen">
-            {/* Centered content */}
             <div className="flex-grow flex flex-col justify-center items-center p-6">
               {currentSection === "play" && (
                 <div className="flex flex-col items-center w-11/12 max-w-md space-y-8">
-                  {/* Game title centered */}
-                  <h1 className="game-title text-5xl md:text-6xl text-[var(--monad-off-white)] font-bold">NAD RACER</h1>
-                  {/* Play buttons section */}
+                  <h1 className="game-title text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)]">NAD RACER</h1>
                   <div className="flex flex-col items-center gap-6 w-full">
                     <ConnectedContent startGame={startGame} />
                     {SHOW_DIRECT_PLAY_BUTTON && (
                       <button
-                        className="px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-off-white)]/30 text-[var(--monad-off-white)] rounded-lg hover:text-[var(--monad-purple)] transition-all duration-300 w-full max-w-xs"
+                        className="px-12 py-4 text-xl md:text-2xl bg-black/40 border-2 border-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-lg hover:bg-[var(--monad-purple)]/20 hover:shadow-[0_0_15px_rgba(131,110,249,0.6)] transition-all duration-300 w-full max-w-xs font-[var(--title-font)]"
                         onClick={startGame}
                       >
-                        Play Directly
+                        PLAY DIRECTLY
                       </button>
                     )}
                   </div>
-                  {/* ProfileInfo with subtle spacing */}
-                  <div className="w-full mt-4 md:mt-16">
+                  <div className="w-full mt-4 md:mt-16 px-4 sm:px-0">
                     <ProfileInfo />
                   </div>
                 </div>
               )}
-              {/* Other sections content */}
               {currentSection !== "play" && (
-                <SectionContent section={currentSection} />
+                <GameContent 
+                  gameState={gameState}
+                  score={score}
+                  health={health}
+                  selectedShip={selectedShip}
+                  setSelectedShip={setSelectedShip}
+                  startGame={startGame}
+                  startPlaying={startPlaying}
+                  endGame={endGame}
+                  resetGame={resetGame}
+                  setScore={setScore}
+                  setHealth={setHealth}
+                  currentSection={currentSection}
+                />
               )}
             </div>
           </div>
-          {/* Wallet connect button in top right */}
           <div className="absolute top-4 right-4 z-20">
             <ConnectButton />
           </div>
-        </>
+        </React.Fragment>
       )}
       
-      {/* Ship selection screen */}
+      {/* Ship selection screen - Improved for mobile responsiveness */}
       {gameState === "shipselect" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-start z-10 p-6 pb-32 md:pb-6 overflow-y-auto">
-          <h1 className="text-4xl md:text-5xl text-[var(--monad-off-white)] mb-8 mt-4 md:mt-20">SELECT YOUR SHIP</h1>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl w-full">
-            {SHIP_OPTIONS.map((ship) => (
-              <div
-                key={ship.id}
-                className={`bg-transparent p-4 rounded-xl border ${
-                  selectedShip === ship.id ? "border-[var(--monad-purple)]" : "border-[var(--monad-off-white)]/30"
-                } ${ship.isFree || hasShip2 ? "cursor-pointer" : "cursor-not-allowed opacity-50"} hover:border-[var(--monad-purple)] transition-all duration-300`}
-                onClick={() => (ship.isFree || hasShip2) && setSelectedShip(ship.id)}
-              >
-                <img src={ship.preview} alt={ship.name} className="w-full h-48 object-contain mb-4" />
-                <p className="text-xl text-center text-[var(--monad-off-white)]">{ship.name}</p>
-                {!ship.isFree && !hasShip2 && (
-                  <div className="text-center mt-2">
-                    <p className="text-sm text-[var(--monad-off-white)]/80">Cost: 10,000 NP Tokens</p>
-                    {isConnected ? (
-                      npTokens >= ship.npCost ? (
-                        <button
-                          className="mt-2 px-4 py-2 text-sm bg-transparent border border-[var(--monad-purple)] text-[var(--monad-purple)] rounded-lg hover:bg-[var(--monad-purple)]/20 transition-all duration-300 w-full"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            mintShip2NFT();
-                          }}
-                        >
-                          Mint NFT
-                        </button>
-                      ) : (
-                        <p className="mt-2 text-sm text-red-500">Insufficient NP Tokens</p>
-                      )
-                    ) : (
-                      <p className="mt-2 text-sm text-[var(--monad-off-white)]/80">Connect wallet to unlock</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 p-4 sm:p-6 pb-32 sm:pb-20 md:pb-6 overflow-y-auto bg-gradient-to-b from-black/20 to-[var(--monad-blue)]/20 backdrop-blur-sm">
+          <div className="max-w-4xl w-full flex flex-col items-center">
+            <h1 className="text-2xl sm:text-3xl md:text-5xl text-[var(--monad-off-white)] mb-4 sm:mb-6 font-title relative">
+              <span className="absolute -left-4 sm:-left-6 md:-left-10 top-1/2 transform -translate-y-1/2 opacity-30 text-base sm:text-lg md:text-2xl hidden sm:inline">&#x2726;</span>
+              SELECT YOUR SHIP
+              <span className="absolute -right-4 sm:-right-6 md:-right-10 top-1/2 transform -translate-y-1/2 opacity-30 text-base sm:text-lg md:text-2xl hidden sm:inline">&#x2726;</span>
+            </h1>
+            
+            {/* Small screen layout - Horizontal */}
+            <div className="md:hidden w-full">
+              <div className="flex flex-col items-center">
+                {/* Current ship display */}
+                {SHIP_OPTIONS.map((ship) => (
+                  ship.id === selectedShip && (
+                    <div key={ship.id} className="w-full">
+                      <div className="relative w-full h-40 mb-3 overflow-hidden rounded-lg bg-gradient-to-b from-transparent to-black/20">
+                        <img 
+                          src={ship.preview} 
+                          alt={ship.name} 
+                          className="w-full h-full object-contain" 
+                        />
+                        <div className="absolute inset-0 bg-[var(--monad-purple)]/5 border border-[var(--monad-purple)]/20 rounded-lg">
+                          <div className="absolute -top-10 -left-10 w-16 h-16 bg-[var(--monad-purple)]/10 rounded-full blur-xl"></div>
+                          <div className="absolute -bottom-10 -right-10 w-16 h-16 bg-[var(--monad-purple)]/10 rounded-full blur-xl"></div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col items-center mb-4">
+                        <h3 className="text-xl font-bold text-[var(--monad-off-white)] mb-1">{ship.name}</h3>
+                        <div className="flex items-center justify-center gap-1 mb-2">
+                          {[...Array(5)].map((_, i) => (
+                            <span 
+                              key={i} 
+                              className={`w-1 h-5 rounded-full ${
+                                i < 3 
+                                  ? "bg-[var(--monad-purple)]" 
+                                  : "bg-[var(--monad-off-white)]/20"
+                              }`}
+                            ></span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-[var(--monad-off-white)]/70 text-center">
+                          {ship.id === "SHIP_1" ? "Sleek and aerodynamic design" : "Rugged and distinctive styling"}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                ))}
+                
+                {/* Ship selection indicators/buttons */}
+                <div className="flex justify-center space-x-3 mb-4">
+                  {SHIP_OPTIONS.map((ship) => (
+                    <button
+                      key={ship.id}
+                      onClick={() => handleShipSelect(ship.id)}
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all
+                        ${selectedShip === ship.id 
+                          ? "bg-[var(--monad-purple)]/30 border-2 border-[var(--monad-purple)]" 
+                          : "bg-black/30 border border-[var(--monad-off-white)]/30"
+                        }`}
+                    >
+                      <span className="text-xs font-bold">{ship.id === "SHIP_1" ? "1" : "2"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Controls and Launch Button - Always visible and accessible */}
+              <div className="mt-2">
+                <p className="text-xs text-[var(--monad-off-white)]/70 text-center mb-3">
+                  Controls: Arrow Keys/AD to move, Space/W to boost
+                </p>
+                
+                <button
+                  className="w-full px-8 py-3 text-lg bg-[var(--monad-purple)]/20 border-2 border-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-xl hover:bg-[var(--monad-purple)]/40 transition-all duration-300 shadow-[0_0_15px_rgba(131,110,249,0.3)] mb-2"
+                  onClick={startPlaying}
+                >
+                  <span className="inline-block">Launch Mission</span>
+                </button>
+                
+                <p className="text-xs text-[var(--monad-off-white)]/50 text-center">
+                  All ships have identical performance.
+                </p>
+              </div>
+            </div>
+            
+            {/* Larger screen layout - Grid (unchanged) */}
+            <div className="hidden md:block w-full">
+              <div className="grid grid-cols-2 gap-8 w-full">
+                {SHIP_OPTIONS.map((ship) => (
+                  <div
+                    key={ship.id}
+                    className={`relative group bg-black/40 p-5 rounded-xl border-2 backdrop-blur-md cursor-pointer transition-all duration-300 transform hover:scale-[1.02] 
+                      ${selectedShip === ship.id 
+                        ? "border-[var(--monad-purple)] shadow-[0_0_15px_rgba(131,110,249,0.6)]" 
+                        : "border-[var(--monad-off-white)]/20 hover:border-[var(--monad-off-white)]/60"
+                      }`}
+                    onClick={() => handleShipSelect(ship.id)}
+                  >
+                    <div className="relative w-full h-48 lg:h-56 mb-4 overflow-hidden rounded-lg bg-gradient-to-b from-transparent to-black/20">
+                      <img 
+                        src={ship.preview} 
+                        alt={ship.name} 
+                        className={`w-full h-full object-contain transition-transform duration-700 
+                          ${selectedShip === ship.id ? "scale-110" : "group-hover:scale-105"}`} 
+                      />
+                      
+                      {selectedShip === ship.id && (
+                        <div className="absolute inset-0 bg-[var(--monad-purple)]/5 border border-[var(--monad-purple)]/20 rounded-lg flex items-center justify-center">
+                          <div className="absolute -top-10 -left-10 w-20 h-20 bg-[var(--monad-purple)]/10 rounded-full blur-xl"></div>
+                          <div className="absolute -bottom-10 -right-10 w-20 h-20 bg-[var(--monad-purple)]/10 rounded-full blur-xl"></div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-col items-center">
+                      <h3 className="text-xl sm:text-2xl font-bold text-[var(--monad-off-white)] mb-2">{ship.name}</h3>
+                      <div className="flex items-center justify-center gap-1 mb-3">
+                        {[...Array(5)].map((_, i) => (
+                          <span 
+                            key={i} 
+                            className={`w-1.5 h-6 rounded-full ${
+                              i < 3 
+                                ? "bg-[var(--monad-purple)]" 
+                                : "bg-[var(--monad-off-white)]/20"
+                            }`}
+                          ></span>
+                        ))}
+                      </div>
+                      <p className="text-sm text-[var(--monad-off-white)]/70">
+                        {ship.id === "SHIP_1" ? "Sleek and aerodynamic design" : "Rugged and distinctive styling"}
+                      </p>
+                    </div>
+                    
+                    {selectedShip === ship.id && (
+                      <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 translate-y-1/2">
+                        <div className="w-4 h-4 rotate-45 bg-[var(--monad-purple)]"></div>
+                      </div>
                     )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+              
+              <p className="mt-6 text-sm text-[var(--monad-off-white)]/70 text-center">
+                Controls: Arrow Keys/AD to move, Space/W to boost
+              </p>
+              
+              <button
+                className="mt-6 md:mt-8 px-12 py-4 text-xl md:text-2xl bg-[var(--monad-purple)]/20 border-2 border-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-xl hover:bg-[var(--monad-purple)]/40 transition-all duration-300 w-full max-w-xs shadow-[0_0_15px_rgba(131,110,249,0.3)] mx-auto block"
+                onClick={startPlaying}
+              >
+                <span className="inline-block">Launch Mission</span>
+              </button>
+              
+              <p className="mt-4 text-sm text-[var(--monad-off-white)]/50 text-center max-w-md mx-auto mb-6 sm:mb-0">
+                Choose your ship's appearance. All ships have identical performance.
+              </p>
+            </div>
           </div>
-          <button
-            className="mt-8 px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-off-white)]/30 text-[var(--monad-off-white)] rounded-lg hover:text-[var(--monad-purple)] transition-all duration-300 w-full max-w-xs"
-            onClick={startPlaying}
-          >
-            Confirm Selection
-          </button>
         </div>
       )}
       
       {/* In-game HUD */}
       {gameState === "playing" && (
-        <div className="absolute top-4 left-4 bg-transparent p-4 rounded-xl border border-[var(--monad-off-white)]/30 z-10">
-          <div className="flex items-center gap-6">
-            <div>
-              <span className="text-4xl md:text-5xl text-[var(--monad-off-white)]">{score}</span>
-            </div>
-            <div>
-              <div className="flex gap-1">
-                {Array(9)
-                  .fill()
-                  .map((_, i) => (
-                    <div
-                      key={i}
-                      className={`w-1 h-8 rounded-full ${i < health * 3 ? getHealthColor(health) : "bg-gray-700"}`}
-                    ></div>
-                  ))}
+        <React.Fragment>
+          <div className="absolute top-4 left-4 bg-transparent p-4 rounded-xl border border-[var(--monad-off-white)]/30 z-10">
+            <div className="flex items-center gap-6">
+              <div>
+                <span className="text-4xl md:text-5xl text-[var(--monad-off-white)]">{score}</span>
               </div>
-              <p className="text-xs uppercase text-[var(--monad-off-white)] mt-1">HEALTH</p>
+              <div>
+                <div className="flex gap-1">
+                  {Array(9)
+                    .fill()
+                    .map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-1 h-8 rounded-full ${i < health * 3 ? getHealthColor(health) : "bg-gray-700"}`}
+                      ></div>
+                    ))}
+                </div>
+                <p className="text-xs uppercase text-[var(--monad-off-white)] mt-1">HEALTH</p>
+              </div>
             </div>
+          </div>
+          
+          {/* FPS Counter */}
+          <div className="absolute top-28 left-4 text-xs text-[var(--monad-off-white)]/80">
+            FPS: {fps}
+          </div>
+        </React.Fragment>
+      )}
+      
+      {/* Transaction Status Bar - Updated Design */}
+      {gameState === "playing" && (
+        <div className="absolute top-4 right-4 z-10 max-w-[200px]">
+          <div className="flex flex-col items-end space-y-1.5">
+            {txHistory.map((tx) => {
+              const ageMs = Date.now() - tx.timestamp;
+              const opacity = Math.max(0, 1 - ageMs / 5000);
+              
+              if (opacity <= 0) return null;
+              
+              // Determine notification style based on type
+              let style = {
+                collection: {
+                  text: "text-[var(--monad-purple)]",
+                  dot: "bg-[var(--monad-purple)]"
+                },
+                minting: {
+                  text: "text-yellow-400",
+                  dot: "bg-yellow-400"
+                },
+                error: {
+                  text: "text-red-400",
+                  dot: "bg-red-400"
+                }
+              }[tx.type] || {
+                text: "text-[var(--monad-purple)]",
+                dot: "bg-[var(--monad-purple)]"
+              };
+              
+              return (
+                <div 
+                  key={tx.id} 
+                  className="flex items-center bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--monad-off-white)]/10" 
+                  style={{ opacity }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs ${style.text}`}>{tx.message}</span>
+                    {tx.txHash && (
+                      <span className="text-[10px] text-[var(--monad-off-white)]/60">{tx.txHash}</span>
+                    )}
+                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></span>
+                  </div>
+                </div>
+              );
+            }).filter(Boolean)}
           </div>
         </div>
       )}
       
-      {/* Mobile controls during gameplay */}
+      {/* Mobile controls */}
       {gameState === "playing" && (
         <div className="fixed bottom-12 left-1/2 transform -translate-x-1/2 z-50 flex justify-between w-11/12 max-w-md md:hidden touch-none">
           <button
@@ -513,71 +1083,25 @@ function GameContent({ gameState, score, health, selectedShip, setSelectedShip, 
       
       {/* Game over screen */}
       {gameState === "gameover" && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent p-8 rounded-2xl border border-[var(--monad-off-white)]/30 z-10 w-full max-w-md">
-          <h1 className="text-5xl md:text-6xl text-[var(--monad-off-white)] mb-6 text-center font-bold">GAME OVER</h1>
-          {score > onChainHighScore && onChainHighScore > 0 && (
-            <p className="text-xl md:text-2xl text-[var(--monad-purple)] mb-6 text-center">
-              Congratulations for breaking your previous high score!
-            </p>
-          )}
-          <div className="text-center mb-4">
-            <p className="text-sm uppercase text-[var(--monad-off-white)]/80 font-medium">Final Score</p>
-            <p className="text-6xl md:text-7xl text-[var(--monad-off-white)] font-bold">{score}</p>
-          </div>
-          <div className="text-center mb-8">
-            <p className="text-xs uppercase text-[var(--monad-off-white)]/80 font-medium">Previous High Score</p>
-            <p className="text-xl md:text-2xl text-[var(--monad-off-white)]">{onChainHighScore}</p>
-          </div>
-          <div className="flex flex-col gap-4 justify-center items-center">
-            {isConnected && score > 0 && (
-              <button
-                className="px-12 py-4 text-xl md:text-2xl bg-transparent border border-[var(--monad-purple   border-[var(--monad-purple)] text-[var(--monad-purple)] rounded-lg hover:bg-[var(--monad-purple)]/20 transition-all duration-300 w-full max-w-xs"
-                onClick={claimPoints}
-              >
-                Claim Points
-              </button>
-            )}
-            <ConnectedContent startGame={startGame} finalScore={score} resetGame={resetGame} />
-          </div>
-        </div>
+        <GameContent
+          gameState={gameState}
+          score={score}
+          health={health}
+          selectedShip={selectedShip}
+          setSelectedShip={setSelectedShip}
+          startGame={startGame}
+          startPlaying={startPlaying}
+          endGame={endGame}
+          resetGame={resetGame}
+          setScore={setScore}
+          setHealth={setHealth}
+          currentSection={currentSection}
+        />
       )}
       
-      {/* Footer with version and Monad branding */}
       <Footer appVersion={APP_VERSION} gameState={gameState} />
-    </>
+    </div>
   );
 }
 
-function App() {
-  const { gameState, score, health, selectedShip, setSelectedShip, startGame, startPlaying, endGame, resetGame, setScore, setHealth } = useGameState();
-
-  return (
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>
-          <div
-            className={`relative w-screen h-screen ${
-              gameState === "playing" ? "overflow-hidden" : "overflow-auto"
-            } bg-[var(--monad-black)] text-[var(--monad-off-white)]`}
-          >
-            <GameContent
-              gameState={gameState}
-              score={score}
-              health={health}
-              selectedShip={selectedShip}
-              setSelectedShip={setSelectedShip}
-              startGame={startGame}
-              startPlaying={startPlaying}
-              endGame={endGame}
-              resetGame={resetGame}
-              setScore={setScore}
-              setHealth={setHealth}
-            />
-          </div>
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  );
-}
-
-export default App;
+export default App; 

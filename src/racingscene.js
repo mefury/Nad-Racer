@@ -1,16 +1,17 @@
 // racingscene.js
 // Manages the 3D environment and rendering for the racing game using Three.js.
-// Integrates an infinite starfield with configurable spreads, a textured skydome, sound effects, and dynamic game logic.
+// Integrates an infinite starfield with configurable spreads, a textured skydome, and dynamic game logic.
 // Updated to use time-based delta for consistent movement speed across varying refresh rates, while preserving original spawning logic.
 
-import React, { useEffect, useRef } from "react"; // React hooks for component lifecycle and refs
+import React, { useEffect, useRef, useState, useCallback } from "react"; // React hooks for component lifecycle and refs
 import * as THREE from "three"; // THREE.js for 3D rendering
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"; // Loader for GLTF 3D models
+// AudioSystem import removed
 // eslint-disable-next-line no-unused-vars
-import { CONFIG, resetGameState, spawnObstacle, spawnCoins, updateShipMovement, handleCollisions, applyBlinkEffect, spawnNewObjects } from "./racingLogic"; // Game logic and config, suppress unused vars warning
+import { CONFIG, resetGameState, spawnObstacle, spawnCoins, updateShipMovement, handleCollisions, applyBlinkEffect, spawnNewObjects, updateObstacleAnimations, updateCoinAnimations } from "./racingLogic"; // Game logic and config, suppress unused vars warning
 
 // RacingScene component renders the 3D game scene and handles animation loop
-function RacingScene({ score, setScore, setHealth, health, endGame, gameState, controlsRef, selectedShip }) {
+function RacingScene({ score, setScore, setHealth, health, endGame, gameState, controlsRef, selectedShip, onCoinCollect, onObstacleHit }) {
   const mountRef = useRef(null);              // Ref to DOM element where renderer is mounted
   const animationFrameId = useRef(null);      // Stores animation frame ID for cleanup
   const sceneRef = useRef(null);              // Reference to the Three.js scene object
@@ -28,9 +29,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
   const skydomeRef = useRef(null);            // Reference to the skydome mesh
   const isInitialStartRef = useRef(true);     // Flag for initial game start to reset properly
   const starsRef = useRef(null);              // Reference to starfield particles
-  const engineSoundRef = useRef(null);        // Reference to engine sound audio object
   const lastTimeRef = useRef(performance.now()); // Tracks time of last frame for delta calculation
-
+  const prevScoreRef = useRef(score);         // Tracks previous score for comparison
+  
+  // Audio system initialization removed
+  
   // useEffect hook initializes the scene and manages its lifecycle
   useEffect(() => {
     console.log("RacingScene useEffect triggered with gameState:", gameState, "selectedShip:", selectedShip);
@@ -69,49 +72,96 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
     // --- Lighting Setup ---
     if (!scene.children.some(child => child instanceof THREE.AmbientLight)) {
       const ambientLight = new THREE.AmbientLight(
-        CONFIG.AMBIENT_LIGHT_COLOR,    // Bluish ambient color
+        CONFIG.AMBIENT_LIGHT_COLOR,    // Space ambient color
         CONFIG.AMBIENT_LIGHT_INTENSITY * CONFIG.LIGHT_INTENSITY // Adjusted intensity
       );
       scene.add(ambientLight); // Add ambient light to scene
     }
+    
     if (!scene.children.some(child => child instanceof THREE.DirectionalLight)) {
       const dirLight = new THREE.DirectionalLight(
-        CONFIG.DIR_LIGHT_COLOR,        // Warm white color
+        CONFIG.DIR_LIGHT_COLOR,        // Purple-tinted color
         CONFIG.DIR_LIGHT_INTENSITY * CONFIG.LIGHT_INTENSITY // Adjusted intensity
       );
       dirLight.position.set(
         CONFIG.DIR_LIGHT_POSITION_X,  // X position
         CONFIG.DIR_LIGHT_POSITION_Y,  // Y position (above)
-        CONFIG.DIR_LIGHT_POSITION_Z   // Z position (behind)
+        CONFIG.DIR_LIGHT_POSITION_Z   // Z position
       );
       dirLight.castShadow = true;     // Enable shadow casting
       dirLight.shadow.bias = CONFIG.SHADOW_BIAS; // Adjust shadow bias to reduce artifacts
       dirLight.shadow.mapSize.set(CONFIG.SHADOW_MAP_SIZE, CONFIG.SHADOW_MAP_SIZE); // High-res shadow map
       scene.add(dirLight); // Add directional light to scene
+      
+      // Add a spotlight to illuminate the track ahead for better visibility of obstacles and coins
+      const spotLight = new THREE.SpotLight(0xffffff, 4.0, 200, Math.PI / 4, 0.5, 1);
+      spotLight.position.set(0, 40, -20); // Position above and slightly behind camera
+      spotLight.target.position.set(0, 0, -50); // Target ahead of the ship
+      scene.add(spotLight);
+      scene.add(spotLight.target);
+      
+      // Makes the spotlight move with the ship
+      const updateSpotlightPosition = () => {
+        const shipPos = rocketGroup?.position;
+        if (shipPos) {
+          spotLight.position.set(shipPos.x, shipPos.y + 40, shipPos.z + 10);
+          spotLight.target.position.set(shipPos.x, shipPos.y, shipPos.z - 50);
+        }
+      };
+      
+      // Store the function on the scene to access it in animation loop
+      scene.userData.updateSpotlightPosition = updateSpotlightPosition;
     }
 
     // --- Skydome Setup with Texture ---
     if (!skydomeRef.current) {
       const textureLoader = new THREE.TextureLoader();
-      const skydomeTexture = textureLoader.load(CONFIG.SKYDOME_TEXTURE_PATH); // Load space background texture
+      const skydomeTexture = textureLoader.load(CONFIG.SKYDOME_TEXTURE_PATH, (texture) => {
+        // Improve texture quality and prevent stretching
+        texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.generateMipmaps = true;
+        console.log("Skydome texture loaded with anisotropy:", texture.anisotropy);
+      }); 
       skydomeTexture.wrapS = THREE.RepeatWrapping; // Repeat texture horizontally
       skydomeTexture.wrapT = THREE.RepeatWrapping; // Repeat texture vertically
+      // Use fewer repeats to avoid visible texture stretching
+      skydomeTexture.repeat.set(1, 1);
+      
       const skydome = new THREE.Mesh(
-        new THREE.SphereGeometry(CONFIG.SKYDOME_RADIUS, CONFIG.SKYDOME_SEGMENTS, CONFIG.SKYDOME_SEGMENTS), // Large sphere
+        new THREE.SphereGeometry(CONFIG.SKYDOME_RADIUS, CONFIG.SKYDOME_SEGMENTS, CONFIG.SKYDOME_SEGMENTS), // Higher quality sphere
         new THREE.MeshPhongMaterial({
           map: skydomeTexture,         // Apply texture
           color: CONFIG.SKYDOME_COLOR, // Fallback color
-          emissive: CONFIG.SKYDOME_EMISSIVE, // Emissive color (none by default)
+          emissive: CONFIG.SKYDOME_EMISSIVE, // Emissive color for subtle glow
           emissiveIntensity: CONFIG.SKYDOME_EMISSIVE_INTENSITY, // Emissive intensity
           transparent: true,
           opacity: CONFIG.SKYDOME_OPACITY, // Full opacity
-          side: THREE.BackSide         // Render inside of sphere for sky effect
+          side: THREE.BackSide,        // Render inside of sphere for sky effect
+          fog: false                   // Skydome should not be affected by fog
         })
       );
       skydome.scale.set(CONFIG.SKYDOME_SCALE_X, CONFIG.SKYDOME_SCALE_Y, CONFIG.SKYDOME_SCALE_Z); // Apply scale
       scene.add(skydome);
       skydomeRef.current = skydome;
       console.log("Skydome initialized with texture:", CONFIG.SKYDOME_TEXTURE_PATH);
+      
+      // Add subtle space fog for depth effect
+      scene.fog = new THREE.FogExp2(0x000033, 0.0005);
+      
+      // Add a few distant star point lights for ambiance
+      const createDistantStar = (x, y, z, intensity, color) => {
+        const light = new THREE.PointLight(color, intensity, 150);
+        light.position.set(x, y, z);
+        scene.add(light);
+        return light;
+      };
+      
+      // Create a few distant stars with different colors
+      createDistantStar(200, 100, -100, 0.5, 0x8866ff);  // Purple-ish distant star
+      createDistantStar(-250, 50, -150, 0.3, 0x6688ff);  // Blue-ish distant star
+      createDistantStar(0, -100, -200, 0.2, 0xffaa66);   // Orange-ish distant star
     }
 
     // --- Track Border Lines Setup ---
@@ -189,29 +239,74 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
     if (!starsRef.current) {
       const starsGeometry = new THREE.BufferGeometry();
       const starPositions = new Float32Array(CONFIG.STARFIELD_COUNT * 3); // Buffer for star positions
+      const starColors = new Float32Array(CONFIG.STARFIELD_COUNT * 3); // Buffer for star colors
+      const starSizes = new Float32Array(CONFIG.STARFIELD_COUNT); // Buffer for varied star sizes
+      
+      // Star color variety - cooler and warmer stars
+      const starColorOptions = [
+        new THREE.Color(0xFFFFFF), // Pure white
+        new THREE.Color(0xCCDDFF), // Bluish white
+        new THREE.Color(0xFFEEDD), // Warm white
+        new THREE.Color(0xFFDD88), // Yellow-ish
+        new THREE.Color(0xAACCFF), // Light blue
+        new THREE.Color(0xFFAAAA)  // Light red
+      ];
+      
       for (let i = 0; i < CONFIG.STARFIELD_COUNT; i++) {
         starPositions[i * 3] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_X; // Random X position
         starPositions[i * 3 + 1] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_Y; // Random Y position
         starPositions[i * 3 + 2] = shipConfig.POSITION_Z - (Math.random() * CONFIG.STARFIELD_SPREAD_Z); // Random Z ahead
+        
+        // Assign random color from options
+        const colorIndex = Math.floor(Math.random() * starColorOptions.length);
+        const color = starColorOptions[colorIndex];
+        starColors[i * 3] = color.r;
+        starColors[i * 3 + 1] = color.g;
+        starColors[i * 3 + 2] = color.b;
+        
+        // Assign random size with bias toward smaller stars (realistic distribution)
+        const sizeBias = Math.random() * Math.random(); // Bias toward smaller values
+        starSizes[i] = CONFIG.STARFIELD_SIZE * (0.5 + sizeBias * 1.5); // Range from 50% to 200% of base size
       }
+      
       starsGeometry.setAttribute("position", new THREE.BufferAttribute(starPositions, 3));
+      starsGeometry.setAttribute("color", new THREE.BufferAttribute(starColors, 3));
+      starsGeometry.setAttribute("size", new THREE.BufferAttribute(starSizes, 1));
+      
       const starsMaterial = new THREE.PointsMaterial({
-        color: CONFIG.STARFIELD_COLOR,    // White stars
-        size: CONFIG.STARFIELD_SIZE,      // Star size
-        sizeAttenuation: true             // Size reduces with distance
+        size: CONFIG.STARFIELD_SIZE,
+        sizeAttenuation: true,           // Size reduces with distance
+        vertexColors: true,              // Use vertex colors for variety
+        transparent: true,
+        opacity: 0.8,                    // Slight transparency for softer look
+        map: createStarSprite()          // Use a circular sprite for better-looking stars
       });
+      
       const stars = new THREE.Points(starsGeometry, starsMaterial);
       scene.add(stars);
       starsRef.current = stars;
-      console.log("Starfield initialized with", CONFIG.STARFIELD_COUNT, "stars");
+      console.log("Enhanced starfield initialized with", CONFIG.STARFIELD_COUNT, "stars");
     }
 
-    // --- Engine Sound Setup ---
-    if (!engineSoundRef.current) {
-      engineSoundRef.current = new Audio(CONFIG.SOUND.ENGINE_PATH); // Load engine sound file
-      engineSoundRef.current.loop = CONFIG.SOUND.ENGINE_LOOP; // Enable looping
-      engineSoundRef.current.volume = CONFIG.SOUND.ENGINE_VOLUME; // Set default volume
-      console.log("Engine sound initialized with path:", CONFIG.SOUND.ENGINE_PATH);
+    // Create a circular sprite for stars with a soft glow
+    function createStarSprite() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 32;
+      canvas.height = 32;
+      const ctx = canvas.getContext('2d');
+      
+      // Draw a radial gradient for a better-looking star
+      const gradient = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+      gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');  // Core of star
+      gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.8)'); // Mid of star
+      gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');  // Edge of star
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 32, 32);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      return texture;
     }
 
     // --- Game State Transition Handling ---
@@ -222,12 +317,9 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
       speedRef.current = { lateral: 0, boost: 0 }; // Reset movement speeds
       nextSpawnZRef.current = rocketGroup.position.z - CONFIG.SPAWN_INTERVAL; // Set spawn point ahead of ship
       isInitialStartRef.current = false; // Mark initial start as complete
-      engineSoundRef.current.play().catch((e) => console.error("Engine sound play error:", e)); // Play engine sound
       console.log("Game started - Speed:", speedRef.current, "Controls:", controlsRef.current);
     } else if (gameState !== "playing" && prevGameStateRef.current === "playing") {
-      engineSoundRef.current.pause(); // Pause sound when game stops
-      engineSoundRef.current.currentTime = 0; // Reset sound to start
-      console.log("Game paused/stopped - Engine sound paused");
+      console.log("Game paused or ended");
     }
     prevGameStateRef.current = gameState; // Update previous state
 
@@ -236,17 +328,17 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
     // --- Keyboard Event Listeners ---
     const onKeyDown = (e) => {
       if (gameState !== "playing" || !modelLoadedRef.current) return; // Ignore if not playing or model not loaded
-      if (e.key === "ArrowLeft") controlsRef.current.left = true; // Move left
-      if (e.key === "ArrowRight") controlsRef.current.right = true; // Move right
-      if (e.key === " ") controlsRef.current.boost = true; // Activate boost
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") controlsRef.current.left = true; // Move left (arrow or A key)
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") controlsRef.current.right = true; // Move right (arrow or D key)
+      if (e.key === " " || e.key === "w" || e.key === "W") controlsRef.current.boost = true; // Activate boost (space or W key)
       console.log("Key down:", e.key, "Controls:", { ...controlsRef.current });
     };
 
     const onKeyUp = (e) => {
       if (gameState !== "playing" || !modelLoadedRef.current) return;
-      if (e.key === "ArrowLeft") controlsRef.current.left = false; // Stop moving left
-      if (e.key === "ArrowRight") controlsRef.current.right = false; // Stop moving right
-      if (e.key === " ") controlsRef.current.boost = false; // Deactivate boost
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") controlsRef.current.left = false; // Stop moving left
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") controlsRef.current.right = false; // Stop moving right
+      if (e.key === " " || e.key === "w" || e.key === "W") controlsRef.current.boost = false; // Deactivate boost
       console.log("Key up:", e.key, "Controls:", { ...controlsRef.current });
     };
 
@@ -266,25 +358,25 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
         // Update ship movement with selected ship and delta time for consistent speed
         updateShipMovement(rocketGroup, speedRef, controlsRef, selectedShip, delta);
 
-        // Handle collisions and apply blink effect
-        blinkCount = handleCollisions(
-          rocketGroup, obstaclesRef, coinsRef, scene, setHealth, endGame, score, setScore, shipConfig.COLLISION_RADIUS
+        // Handle collisions with obstacles and coins
+        const collisionResult = handleCollisions(
+          rocketGroup, obstaclesRef, coinsRef, scene, setHealth, endGame, score, setScore, shipConfig.COLLISION_RADIUS, onCoinCollect, onObstacleHit
         );
-        blinkCount = applyBlinkEffect(rocketGroup, blinkCount, originalMaterialsRef);
-
-        // Adjust engine sound volume based on boost state, scaled by delta
-        if (controlsRef.current.boost && engineSoundRef.current.volume < CONFIG.SOUND.ENGINE_VOLUME * 1.5) {
-          engineSoundRef.current.volume = Math.min(
-            CONFIG.SOUND.ENGINE_VOLUME * 1.5, engineSoundRef.current.volume + 0.05 * deltaScale
-          ); // Increase volume during boost
-          console.log("Boost on - Engine volume:", engineSoundRef.current.volume);
-        } else if (!controlsRef.current.boost && engineSoundRef.current.volume > CONFIG.SOUND.ENGINE_VOLUME) {
-          engineSoundRef.current.volume = Math.max(
-            CONFIG.SOUND.ENGINE_VOLUME, engineSoundRef.current.volume - 0.05 * deltaScale
-          ); // Decrease volume when boost off
-          console.log("Boost off - Engine volume:", engineSoundRef.current.volume);
+        
+        // Apply blinking effect if ship was hit
+        if (collisionResult.blinkCount > 0) {
+          blinkCount = collisionResult.blinkCount;
         }
-
+        
+        // Apply the blinking effect to the ship
+        blinkCount = applyBlinkEffect(rocketGroup, blinkCount, originalMaterialsRef);
+        
+        // Update obstacle animations
+        updateObstacleAnimations(obstaclesRef, delta);
+        
+        // Update coin animations for better visibility
+        updateCoinAnimations(coinsRef, delta);
+        
         // Log ship position and controls for debugging
         console.log("Ship X:", rocketGroup.position.x, "Speed:", { ...speedRef.current }, "Controls:", { ...controlsRef.current });
 
@@ -295,6 +387,11 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
           rocketGroup.position.z + CONFIG.CAMERA_Z_OFFSET
         );
         camera.lookAt(rocketGroup.position.x, shipConfig.POSITION_Y, rocketGroup.position.z - 20); // Look ahead of ship
+        
+        // Update spotlight position to follow ship and illuminate the track ahead
+        if (scene.userData.updateSpotlightPosition) {
+          scene.userData.updateSpotlightPosition();
+        }
 
         // Update skydome position and rotation, scaled by delta
         skydomeRef.current.position.set(0, 0, rocketGroup.position.z); // Center on ship Z
@@ -311,23 +408,42 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
         // Spawn new objects as ship progresses (original logic preserved)
         spawnNewObjects(rocketGroup, nextSpawnZRef, obstaclesRef, coinsRef, scene);
 
-        // Update starfield positions for continuous effect, scaled by delta
+        // Update starfield positions for continuous effect with improved variation
         if (starsRef.current) {
           const positions = starsRef.current.geometry.attributes.position.array;
+          const sizes = starsRef.current.geometry.attributes.size.array;
           const shipZ = rocketGroup.position.z;
-          for (let i = 2; i < positions.length; i += 3) {
-            positions[i] += CONFIG.STARFIELD_SPEED * deltaScale; // Move stars toward ship (positive Z)
-            if (positions[i] > shipZ + CONFIG.STARFIELD_SPREAD_Z / 2) {
-              positions[i] = shipZ - CONFIG.STARFIELD_SPREAD_Z / 2; // Reset to far ahead
-              positions[i - 2] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_X; // Random X
-              positions[i - 1] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_Y; // Random Y
+          
+          for (let i = 0, j = 0; i < positions.length; i += 3, j++) {
+            // Move stars toward ship with varied speeds based on size
+            const speed = CONFIG.STARFIELD_SPEED * (0.8 + (sizes[j] / CONFIG.STARFIELD_SIZE) * 0.4);
+            positions[i + 2] += speed * deltaScale; 
+            
+            // Reset stars when they pass behind the ship
+            if (positions[i + 2] > shipZ + CONFIG.STARFIELD_SPREAD_Z / 4) {
+              positions[i] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_X; // Random X
+              positions[i + 1] = (Math.random() - 0.5) * CONFIG.STARFIELD_SPREAD_Y; // Random Y
+              positions[i + 2] = shipZ - CONFIG.STARFIELD_SPREAD_Z; // Far ahead of ship
+              
+              // Occasionally twinkle stars by randomly changing their size
+              if (Math.random() < 0.05) {
+                const sizeBias = Math.random() * Math.random();
+                sizes[j] = CONFIG.STARFIELD_SIZE * (0.5 + sizeBias * 1.5);
+              }
             }
           }
-          starsRef.current.geometry.attributes.position.needsUpdate = true; // Flag for update
+          starsRef.current.geometry.attributes.position.needsUpdate = true;
+          starsRef.current.geometry.attributes.size.needsUpdate = true;
         }
 
         // Log object counts for debugging
         console.log("Obstacles:", obstaclesRef.current.length, "Coins:", coinsRef.current.length);
+
+        // Log if a coin was recently collected (debug only)
+        if (score > prevScoreRef.current) {
+          console.log("🚀 RacingScene - Score increased from", prevScoreRef.current, "to", score, "- onCoinCollect:", !!onCoinCollect);
+          prevScoreRef.current = score;
+        }
       }
 
       renderer.render(scene, camera); // Render the scene
@@ -340,14 +456,12 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
       document.removeEventListener("keydown", onKeyDown); // Remove key listeners
       document.removeEventListener("keyup", onKeyUp);
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); // Stop animation
-      if (engineSoundRef.current) {
-        engineSoundRef.current.pause(); // Stop sound
-        engineSoundRef.current = null;
-        console.log("Engine sound cleaned up");
-      }
+      
+      // Audio cleanup code removed
+      
       // Note: Renderer and scene are not disposed here to allow reuse; adjust if full cleanup needed
     };
-  }, [gameState, endGame, setScore, setHealth, health, score, controlsRef, selectedShip]); // Dependencies for useEffect
+  }, [gameState, endGame, setScore, setHealth, health, score, controlsRef, selectedShip, onCoinCollect, onObstacleHit]); // Removed soundsInitializedRef.current dependency
 
   // Render the mount point for the Three.js canvas
   return <div ref={mountRef} className="absolute inset-0 w-full h-full" />;
