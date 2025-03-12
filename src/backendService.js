@@ -2,7 +2,7 @@
 // Using absolute URL to avoid potential path issues
 const API_URL = process.env.NODE_ENV === 'production' 
   ? window.location.origin + '/api'  // In production, use relative path
-  : 'http://172.86.83.247:3001/api';     // In development, use localhost
+  : 'http://coolify.nadracer.xyz:3001/api';     // In development, use localhost
 
 // Utility function to log API requests
 const logApiRequest = (method, endpoint, data = null) => {
