@@ -349,10 +349,10 @@ export function Footer({ appVersion, gameState }) {
 
   return (
     <div className="fixed bottom-4 md:bottom-4 left-0 right-0 flex justify-between items-center px-4 z-10">
-      <div className="text-[var(--monad-off-white)]/80 text-xs sm:text-sm bg-black/40 px-3 py-1.5 rounded-lg border border-[var(--monad-purple)]/30 shadow-[0_0_8px_rgba(131,110,249,0.1)]">
+      <div className="text-[var(--monad-off-white)]/80 text-xs sm:text-sm bg-black/40 px-3 py-1.5 rounded-lg">
         <span className="font-medium">Version:</span> {appVersion}
       </div>
-      <div className="bg-black/40 px-3 py-1.5 rounded-lg border border-[var(--monad-purple)]/30 shadow-[0_0_8px_rgba(131,110,249,0.1)]">
+      <div className="bg-black/40 px-3 py-1.5 rounded-lg">
         <PoweredByMonad />
       </div>
     </div>

@@ -13,7 +13,7 @@ import {
   AboutPage,
   LeaderboardPage 
 } from "./components";
-import { processTokens, checkPlayerRegistration, registerPlayer, saveScore, getLeaderboard, testApiConnection, getApiUrl } from "./backendService";
+import { processTokens, checkPlayerRegistration, registerPlayer, saveScore, getLeaderboard } from "./backendService";
 import { audioSystem } from './audioSystem';
 
 // Enable or disable console logs globally - set to false for production
@@ -426,77 +426,6 @@ function WalletAddressListener() {
   }, [isConnected, address]);
 
   return null;
-}
-
-// Add a BackendStatus component to help with debugging
-function BackendStatus() {
-  const [status, setStatus] = useState({ tested: false, success: false, message: 'Not tested' });
-  const [showDetails, setShowDetails] = useState(false);
-  
-  const checkBackendStatus = async () => {
-    try {
-      const result = await testApiConnection();
-      setStatus({
-        tested: true,
-        success: result.success,
-        message: result.message,
-        apiUrl: result.apiUrl,
-        details: result.corsResponse || result.error
-      });
-    } catch (error) {
-      setStatus({
-        tested: true,
-        success: false,
-        message: `Error testing connection: ${error.message}`,
-        apiUrl: getApiUrl()
-      });
-    }
-  };
-  
-  useEffect(() => {
-    checkBackendStatus();
-    const interval = setInterval(checkBackendStatus, 30000); // Check every 30 seconds
-    return () => clearInterval(interval);
-  }, []);
-  
-  const statusColor = status.success ? 'text-green-500' : 'text-red-500';
-  
-  return (
-    <div className="fixed bottom-0 right-0 bg-black/80 p-2 text-xs rounded-tl-md z-50">
-      <div className="flex items-center">
-        <div className={`w-2 h-2 rounded-full mr-2 ${status.success ? 'bg-green-500' : 'bg-red-500'}`}></div>
-        <span>API: </span>
-        <span className={statusColor}>{status.success ? 'Connected' : 'Disconnected'}</span>
-        <button 
-          onClick={() => setShowDetails(!showDetails)} 
-          className="ml-2 text-blue-400 hover:text-blue-300"
-        >
-          {showDetails ? 'Hide' : 'Details'}
-        </button>
-        <button 
-          onClick={checkBackendStatus} 
-          className="ml-2 text-blue-400 hover:text-blue-300"
-        >
-          Retry
-        </button>
-      </div>
-      
-      {showDetails && (
-        <div className="mt-2 text-white">
-          <p>URL: {status.apiUrl}</p>
-          <p>Status: {status.message}</p>
-          {status.details && (
-            <details>
-              <summary className="cursor-pointer text-blue-400">Response Details</summary>
-              <pre className="mt-1 text-xs overflow-auto max-h-40">
-                {JSON.stringify(status.details, null, 2)}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 function App() {
@@ -1171,9 +1100,6 @@ function App() {
       )}
       
       <Footer appVersion={APP_VERSION} gameState={gameState} />
-      
-      {/* Add the backend status component */}
-      <BackendStatus />
     </div>
   );
 }
