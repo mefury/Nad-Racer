@@ -1,6 +1,6 @@
 # NAD RACER
 
-![NAD RACER](public/models/ship1.png)
+![NAD RACER](public/preview.png)
 
 A high-speed racing game built for the "Break Monad" event, powered by the Monad blockchain. Race through the cosmic circuits, collect tokens, and compete for the highest score while pushing the boundaries of decentralized gaming.
 
