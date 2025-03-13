@@ -22,7 +22,7 @@ export function StorySection() {
 }
 
 // About Section Component
-export function AboutSection({ showPoweredBy = false }) {
+export function AboutSection() {
   const { address } = useAccount();
 
   return (
@@ -42,35 +42,6 @@ export function AboutSection({ showPoweredBy = false }) {
         </a>{" "}
         for sparking this cosmic race.
       </p>
-      <div className="text-sm sm:text-base text-[var(--monad-off-white)]/60">
-        <p className="mb-2"><strong>Credits:</strong></p>
-        <p className="mb-2">
-          Models: &quot;space ship&quot; by{" "}
-          <a href="https://skfb.ly/LzKz" target="_blank" rel="noopener noreferrer" className="text-[var(--monad-purple)] hover:underline">
-            yanix
-          </a>{" "}
-          is licensed under{" "}
-          <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer" className="text-[var(--monad-purple)] hover:underline">
-            CC BY 4.0
-          </a>.
-        </p>
-        <p>
-          Music by{" "}
-          <a href="https://pixabay.com/users/turtlebeats-46526702/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=251682" target="_blank" rel="noopener noreferrer" className="text-[var(--monad-purple)] hover:underline">
-            TurtleBeats
-          </a>{" "}
-          from{" "}
-          <a href="https://pixabay.com/?utm_source=link-attribution&utm_medium=referral&utm_campaign=music&utm_content=251682" target="_blank" rel="noopener noreferrer" className="text-[var(--monad-purple)] hover:underline">
-            Pixabay
-          </a>.
-        </p>
-      </div>
-      
-      {showPoweredBy && (
-        <div className="mt-8">
-          <PoweredByMonad />
-        </div>
-      )}
     </div>
   );
 }
@@ -124,7 +95,7 @@ export function StoryPage() {
 export function AboutPage() {
   return (
     <div className="bg-black/50 p-6 rounded-xl border border-[var(--monad-off-white)]/30 max-w-2xl w-full">
-      <AboutSection showPoweredBy={true} />
+      <AboutSection />
     </div>
   );
 }

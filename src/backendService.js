@@ -2,7 +2,7 @@
 // Using absolute URL to avoid potential path issues
 const API_URL = process.env.NODE_ENV === 'production' 
   ? 'https://api.nadracer.xyz/api'  // In production, use the deployed API URL
-  : 'https://api.nadracer.xyz/api';     // In development, use the same API for now
+  : 'https://api.nadracer.xyz/api';     // In development, use localhost
 
 // Utility function to log API requests
 const logApiRequest = (method, endpoint, data = null) => {

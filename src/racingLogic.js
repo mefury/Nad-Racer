@@ -17,41 +17,47 @@ export const CONFIG = {
   // --- Ship Configurations ---
   SHIPS: {
     SHIP_1: {
-      GLTF_PATH: "models/ship/scene.gltf",     // Path to Ship 1's GLTF model file
-      TARGET_LENGTH: 6.0,                      // Desired length of the ship model after scaling
-      TARGET_WIDTH: 3.0,                       // Desired width of the ship model after scaling
-      TARGET_HEIGHT: 1.2,                      // Desired height of the ship model after scaling
-      SCALE: 5,                                // Base scaling factor applied to the model
+      USE_CUSTOM_GEOMETRY: true,  // Flag to use custom Three.js geometry instead of GLTF
+      SHIP_TYPE: 'speeder',       // Type identifier for the custom ship
+      TARGET_LENGTH: 8.0,                      // Length appropriate for jet design
+      TARGET_WIDTH: 6.0,                       // Width for wings
+      TARGET_HEIGHT: 2.0,                      // Height adjusted for jet profile
+      SCALE: 2,                              // Scale factor for the ship
       COLLISION_RADIUS: 5.0,                   // Radius for collision detection with obstacles and coins
       POSITION_X: 0.0,                         // Initial X position of the ship (centered)
-      POSITION_Y: 2.0,                         // Initial Y position (height above track)
+      POSITION_Y: 2.2,                         // Height above track
       POSITION_Z: 0,                           // Initial Z position (starting point)
       ROTATION_X: 0,                           // Initial X rotation in radians (no tilt)
-      ROTATION_Y: Math.PI,                     // Initial Y rotation to face forward (negative Z, 180 degrees)
+      ROTATION_Y: 0,                           // Initial Y rotation in radians (forward)
       ROTATION_Z: 0,                           // Initial Z rotation (no roll)
       ROLL_AXIS: "z",                          // Axis for rolling effect (Z for horizontal tilt)
     },
     SHIP_2: {
-      GLTF_PATH: "models/ship2/scene.gltf",    // Path to Ship 2's GLTF model file
+      USE_CUSTOM_GEOMETRY: true,  // Flag to use custom Three.js geometry instead of GLTF
+      SHIP_TYPE: 'bumble',        // Type identifier for the custom ship
       TARGET_LENGTH: 6.0,                      // Desired length of the ship model after scaling
       TARGET_WIDTH: 3.0,                       // Desired width of the ship model after scaling
       TARGET_HEIGHT: 1.2,                      // Desired height of the ship model after scaling
-      SCALE: 5,                                // Base scaling factor applied to the model
+      SCALE: 2,                             // Base scaling factor for the custom model
       COLLISION_RADIUS: 5.0,                   // Radius for collision detection with obstacles and coins
       POSITION_X: 0.0,                         // Initial X position of the ship (centered)
       POSITION_Y: 1,                           // Initial Y position (height above track)
       POSITION_Z: 0,                           // Initial Z position (starting point)
       ROTATION_X: 0,                           // Initial X rotation in radians (no tilt)
-      ROTATION_Y: -Math.PI / 2,                // Initial Y rotation to face forward (negative Z from positive X, -90 degrees)
+      ROTATION_Y: 0,                          // Initial Y rotation in radians (forward)
       ROTATION_Z: 0,                           // Initial Z rotation (no roll)
       ROLL_AXIS: "z",                          // Axis for rolling effect (Z for horizontal tilt)
+      USE_LOW_DETAIL: true,                    // Flag to use lower detail rendering for performance
+      OPTIMIZE_MATERIALS: true,                // Flag to apply material optimizations
+      TEXTURE_QUALITY: 'low',                  // Use lower quality textures
+      SHADOW_CASTING: false,                   // Disable shadow casting for better performance
     },
   },
 
   // --- Movement and Physics ---
   MAX_LATERAL_SPEED: 0.7,        // Maximum speed the ship can move left or right per second
   FORWARD_SPEED: 2.5,            // Constant forward movement speed along Z-axis per second
-  BOOST_SPEED: 2.8,              // Additional speed when boost is activated per second
+  BOOST_SPEED: 2.7,              // Additional speed when boost is activated per second
   ACCELERATION: 0.085,           // Rate of lateral acceleration per frame (scaled by delta)
   FRICTION: 0.88,                // Friction factor to slow lateral movement per frame (0-1, lower = more friction)
   LATERAL_BOUNDS: 0,             // Calculated later as half of TRACK_WIDTH to limit lateral movement

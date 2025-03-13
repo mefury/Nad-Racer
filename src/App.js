@@ -1,20 +1,26 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import RacingScene from "./racingscene";
-import BackgroundScene from "./background";
+import React, { useState, useEffect, useCallback, useRef, memo } from "react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { 
   Navbar, 
   Footer, 
-  GameOverScreen, 
+  GameOverScreen,
   StoryPage,
   AboutPage,
-  LeaderboardPage 
+  LeaderboardPage,
+  StorySection,
+  AboutSection,
+  SectionContent
 } from "./components";
 import { processTokens, checkPlayerRegistration, registerPlayer, saveScore, getLeaderboard } from "./backendService";
 import { audioSystem } from './audioSystem';
+import RacingScene from './racingscene';
+import BackgroundScene from './background';
+import ShipPreview from './ShipPreview';
+import * as THREE from 'three';
+import { CONFIG } from './racingLogic';
 
 // Enable or disable console logs globally - set to false for production
 const DEBUG = false;
@@ -62,8 +68,8 @@ const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button by
 
 // Ship options for selection screen
 const SHIP_OPTIONS = [
-  { id: "SHIP_1", name: "Speeder", preview: "/models/ship1.png", isFree: true },
-  { id: "SHIP_2", name: "Bumble Ship", preview: "/models/ship2.png", isFree: false, npCost: 10000 * 10**18 }, // NFT-locked ship
+  { id: "SHIP_1", name: "Speeder", isFree: true },
+  { id: "SHIP_2", name: "Bumble Ship", isFree: false, npCost: 10000 * 10**18 }, // NFT-locked ship
 ];
 
 // Powered by Monad logo component
@@ -432,103 +438,249 @@ function WalletAddressListener() {
 function LoadingScreen({ onLoaded }) {
   const [progress, setProgress] = useState(0);
   const [loadingText, setLoadingText] = useState("INITIALIZING");
-  const assetsToLoad = [
-    // Images and UI elements
-    '/models/ship1.png', '/models/ship2.png',
-    '/textures/space.jpg',
-    '/svg/fire.svg', '/svg/right.svg', '/svg/left.svg', 
-    '/svg/play.svg', '/svg/about.svg', '/svg/story.svg', 
-    '/svg/leaderboard.svg', '/svg/shop.svg',
-    
-    // Sound files
-    '/sounds/crash.mp3', '/sounds/coin.mp3', 
-    '/sounds/gamebg.mp3', '/sounds/engine.mp3',
-    
-    // 3D models
-    '/models/ship/scene.gltf', '/models/ship/scene.bin',
-    '/models/ship2/scene.gltf', '/models/ship2/scene.bin'
-  ];
-  
-  // Change loading text based on progress
-  useEffect(() => {
-    if (progress < 25) {
-      setLoadingText("INITIALIZING");
-    } else if (progress < 50) {
-      setLoadingText("LOADING ASSETS");
-    } else if (progress < 75) {
-      setLoadingText("PREPARING ENGINES");
-    } else {
-      setLoadingText("READY TO LAUNCH");
-    }
-  }, [progress]);
+  const loadingRef = useRef({ mounted: true });
 
   useEffect(() => {
-    let loadedAssets = 0;
-
-    const updateProgress = () => {
-      loadedAssets += 1;
-      setProgress((loadedAssets / assetsToLoad.length) * 100);
-      if (loadedAssets === assetsToLoad.length) {
-        setTimeout(() => onLoaded(), 500); // Small delay for smooth transition
+    // Simple failsafe timeout
+    const timeoutId = setTimeout(() => {
+      if (loadingRef.current.mounted) {
+        console.log("⚠️ Loading timeout reached, forcing completion");
+        onLoaded();
       }
-    };
+    }, 5000); // Reduced to 5 seconds
 
-    // Preload all assets
-    assetsToLoad.forEach((asset) => {
-      if (asset.endsWith('.mp3')) {
-        // Handle audio files
-        const audio = new Audio();
-        audio.src = asset;
-        audio.addEventListener('canplaythrough', updateProgress, { once: true });
-        audio.addEventListener('error', updateProgress, { once: true });
-        audio.load();
-      } else if (asset.endsWith('.gltf') || asset.endsWith('.bin')) {
-        // For 3D models, we'll just count them as loaded after a timeout
-        // since we can't directly preload them like images
-        setTimeout(updateProgress, 100);
+    // Simpler asset loading simulation
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      if (!loadingRef.current.mounted) return;
+      
+      const elapsed = Date.now() - startTime;
+      const newProgress = Math.min(100, Math.floor((elapsed / 3000) * 100)); // Complete in 3 seconds
+      
+      setProgress(newProgress);
+      
+      if (newProgress < 25) {
+        setLoadingText("INITIALIZING");
+      } else if (newProgress < 50) {
+        setLoadingText("LOADING ASSETS");
+      } else if (newProgress < 75) {
+        setLoadingText("PREPARING ENGINES");
       } else {
-        // Handle image files
-        const img = new Image();
-        img.src = asset;
-        img.onload = updateProgress;
-        img.onerror = updateProgress;
+        setLoadingText("LAUNCHING");
       }
-    });
+      
+      if (newProgress >= 100) {
+        clearInterval(interval);
+        onLoaded();
+      }
+    }, 50); // Update more frequently for smoother animation
+
+    return () => {
+      loadingRef.current.mounted = false;
+      clearTimeout(timeoutId);
+      clearInterval(interval);
+    };
   }, [onLoaded]);
 
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center bg-black z-50">
       <div className="text-center px-4 max-w-md w-full flex flex-col items-center">
-        {/* Game title with much smaller size on mobile */}
         <h1 className="game-title text-[2rem] sm:text-3xl md:text-4xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2 tracking-normal mx-auto text-center">NAD RACER</h1>
         
-        {/* Animated subtitle */}
         <div className="flex justify-center mb-8 w-full">
           <p className="text-[var(--monad-off-white)]/80 text-sm uppercase tracking-[0.3em]">{loadingText}</p>
           <span className="animate-pulse">...</span>
         </div>
         
-        {/* Loading progress container with glow effect */}
         <div className="w-64 h-3 bg-black/40 rounded-full overflow-hidden border border-[var(--monad-off-white)]/20 shadow-[0_0_10px_rgba(131,110,249,0.2)] relative mx-auto">
-          {/* Animated loading bar */}
+          {/* Background pulse effect */}
           <div 
-            className="h-full bg-gradient-to-r from-[var(--monad-purple)]/80 to-[var(--monad-purple)] transition-all duration-300 ease-out"
-            style={{ width: `${progress}%` }}
-          ></div>
+            className="absolute inset-0 bg-gradient-to-r from-[var(--monad-purple)]/0 via-[var(--monad-purple)]/20 to-[var(--monad-purple)]/0"
+            style={{
+              animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              opacity: '0.5'
+            }}
+          />
           
-          {/* Glow effect at the end of the loading bar */}
+          {/* Main progress bar */}
           <div 
-            className="absolute top-0 bottom-0 w-4 bg-[var(--monad-purple)]/50 blur-sm transition-all duration-300"
-            style={{ left: `calc(${progress}% - 16px)`, opacity: progress > 5 ? 1 : 0 }}
-          ></div>
+            className="h-full bg-gradient-to-r from-[var(--monad-purple)]/80 to-[var(--monad-purple)] relative"
+            style={{ 
+              width: `${progress}%`,
+              transition: 'width 0.3s ease-out',
+            }}
+          >
+            {/* Animated glow effect */}
+            <div 
+              className="absolute top-0 right-0 h-full w-4 bg-white/30 blur-sm"
+              style={{
+                animation: 'shimmer 1.5s ease-in-out infinite',
+              }}
+            />
+          </div>
         </div>
         
-        {/* Loading percentage */}
+        <style jsx>{`
+          @keyframes pulse {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 0.4; }
+          }
+          
+          @keyframes shimmer {
+            0% { transform: translateX(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateX(100%); opacity: 0; }
+          }
+        `}</style>
+        
         <p className="mt-3 text-xs text-[var(--monad-off-white)]/60">{Math.round(progress)}%</p>
       </div>
     </div>
   );
 }
+
+// Performance-optimized version of the game HUD
+const GameHUD = memo(function GameHUD({ score, health, getHealthColor, fps }) {
+  return (
+    <React.Fragment>
+      <div className="absolute top-4 left-4 bg-transparent p-4 rounded-xl border border-[var(--monad-off-white)]/30 z-10">
+        <div className="flex items-center gap-6">
+          <div>
+            <span className="text-4xl md:text-5xl text-[var(--monad-off-white)]">{score}</span>
+          </div>
+          <div>
+            <div className="flex gap-1">
+              {Array(9)
+                .fill()
+                .map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-1 h-8 rounded-full ${i < health * 3 ? getHealthColor(health) : "bg-gray-700"}`}
+                  ></div>
+                ))}
+            </div>
+            <p className="text-xs uppercase text-[var(--monad-off-white)] mt-1">HEALTH</p>
+          </div>
+        </div>
+      </div>
+      
+      {/* FPS Counter */}
+      <div className="absolute top-28 left-4 text-xs text-[var(--monad-off-white)]/80">
+        FPS: {fps}
+      </div>
+    </React.Fragment>
+  );
+});
+
+// Transaction notification component
+const TransactionNotifications = memo(function TransactionNotifications({ txHistory }) {
+  return (
+    <div className="absolute top-4 right-4 z-10 max-w-[200px]">
+      <div className="flex flex-col items-end space-y-1.5">
+        {txHistory.map((tx) => {
+          const ageMs = Date.now() - tx.timestamp;
+          const opacity = Math.max(0, 1 - ageMs / 5000);
+          
+          if (opacity <= 0) return null;
+          
+          // Determine notification style based on type
+          let style = {
+            collection: {
+              text: "text-[var(--monad-purple)]",
+              dot: "bg-[var(--monad-purple)]"
+            },
+            minting: {
+              text: "text-yellow-400",
+              dot: "bg-yellow-400"
+            },
+            error: {
+              text: "text-red-400",
+              dot: "bg-red-400"
+            }
+          }[tx.type] || {
+            text: "text-[var(--monad-purple)]",
+            dot: "bg-[var(--monad-purple)]"
+          };
+          
+          return (
+            <div 
+              key={tx.id} 
+              className="flex items-center bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--monad-off-white)]/10" 
+              style={{ opacity }}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${style.text}`}>{tx.message}</span>
+                {tx.txHash && (
+                  <span className="text-[10px] text-[var(--monad-off-white)]/60">{tx.txHash}</span>
+                )}
+                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></span>
+              </div>
+            </div>
+          );
+        }).filter(Boolean)}
+      </div>
+    </div>
+  );
+});
+
+// Mobile controls component
+const MobileControls = memo(function MobileControls({ controlsRef }) {
+  return (
+    <div className="fixed bottom-12 left-1/2 transform -translate-x-1/2 z-50 flex justify-between w-11/12 max-w-md md:hidden touch-none">
+      <button
+        className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
+        onTouchStart={(e) => {
+          e.preventDefault();
+          controlsRef.current.left = true;
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          controlsRef.current.left = false;
+        }}
+        onTouchCancel={(e) => {
+          e.preventDefault();
+          controlsRef.current.left = false;
+        }}
+      >
+        <img src="/svg/left.svg" alt="Left" className="w-10 h-10 pointer-events-none" draggable="false" />
+      </button>
+      <button
+        className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
+        onTouchStart={(e) => {
+          e.preventDefault();
+          controlsRef.current.boost = true;
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          controlsRef.current.boost = false;
+        }}
+        onTouchCancel={(e) => {
+          e.preventDefault();
+          controlsRef.current.boost = false;
+        }}
+      >
+        <img src="/svg/fire.svg" alt="Boost" className="w-10 h-10 pointer-events-none" draggable="false" />
+      </button>
+      <button
+        className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
+        onTouchStart={(e) => {
+          e.preventDefault();
+          controlsRef.current.right = true;
+        }}
+        onTouchEnd={(e) => {
+          e.preventDefault();
+          controlsRef.current.right = false;
+        }}
+        onTouchCancel={(e) => {
+          e.preventDefault();
+          controlsRef.current.right = false;
+        }}
+      >
+        <img src="/svg/right.svg" alt="Right" className="w-10 h-10 pointer-events-none" draggable="false" />
+      </button>
+    </div>
+  );
+});
 
 function App() {
   const [gameState, setGameState] = useState("start"); // Tracks current game state
@@ -544,21 +696,42 @@ function App() {
   const [fps, setFps] = useState(0); // Add FPS state
   const fpsRef = useRef({ frames: 0, lastTime: performance.now() }); // Add FPS tracking ref
   const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Initialize audio system
+  // Check if we're in development environment
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  // Skip loading screen in development mode with a flag
   useEffect(() => {
-    const initAudio = async () => {
+    // If enabled, skip loading screen in development
+    if (isDev && DEBUG && process.env.NODE_ENV === 'development') {
+      const fastStartParam = new URLSearchParams(window.location.search).get('fastStart');
+      if (fastStartParam === 'true') {
+        setAssetsLoaded(true);
+        setIsLoading(false);
+      }
+    }
+  }, [isDev]);
+  
+  // Initialize audio system - but ONLY when needed, not on initial load
+  const initializeAudioIfNeeded = async () => {
+    if (!audioInitialized) {
       try {
+        // Preload and cache audio for better performance
         const result = await audioSystem.init();
         setAudioInitialized(result);
         console.log('🎵 Audio initialization result:', result);
+        return result;
       } catch (error) {
         console.error('❌ Audio initialization error:', error);
+        return false;
       }
-    };
+    }
+    return audioInitialized;
+  };
 
-    initAudio();
-    
+  // Cleanup audio system when component unmounts
+  useEffect(() => {
     return () => {
       audioSystem.dispose();
     };
@@ -574,36 +747,35 @@ function App() {
           // Ensure user interaction is handled
           await audioSystem.handleUserInteraction();
           
-          // Ensure audio is initialized
-          if (!audioInitialized) {
-            const result = await audioSystem.init();
-            setAudioInitialized(result);
-          }
+          // Ensure audio is initialized - only initialize when needed
+          const audioReady = await initializeAudioIfNeeded();
           
           // Ensure audio context is resumed
           if (audioSystem.audioContext?.state === 'suspended') {
             await audioSystem.audioContext.resume();
           }
           
-          // Stop any existing sounds first
-          audioSystem.stopBackgroundMusic();
-          audioSystem.stopEngineSound();
-          
-          // Small delay to ensure cleanup is complete
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Start background music first
-          audioSystem.startBackgroundMusic();
-          
-          // Small delay before starting engine sound
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Start engine sound
-          audioSystem.startEngineSound();
-          
-          // Debug log active sources
-          console.log('🎵 Active sources after start:', Array.from(audioSystem.activeSources.keys()));
-          
+          // Only play sounds if audio is ready
+          if (audioReady) {
+            // Stop any existing sounds first
+            audioSystem.stopBackgroundMusic();
+            audioSystem.stopEngineSound();
+            
+            // Small delay to ensure cleanup is complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Start background music first
+            audioSystem.startBackgroundMusic();
+            
+            // Small delay before starting engine sound
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Start engine sound
+            audioSystem.startEngineSound();
+            
+            // Debug log active sources
+            console.log('🎵 Active sources after start:', Array.from(audioSystem.activeSources.keys()));
+          }
         } catch (error) {
           console.error('❌ Error managing game audio:', error);
         }
@@ -617,37 +789,73 @@ function App() {
     handleGameAudio();
   }, [gameState, audioInitialized]);
 
-  // Add FPS tracking effect
+  // Optimized FPS tracking with useCallback
+  const updateFps = useCallback(() => {
+    const now = performance.now();
+    const delta = now - fpsRef.current.lastTime;
+    
+    fpsRef.current.frames++;
+    
+    if (delta >= 1000) {
+      setFps(Math.round((fpsRef.current.frames * 1000) / delta));
+      fpsRef.current.frames = 0;
+      fpsRef.current.lastTime = now;
+    }
+  }, []);
+  
+  // Add FPS tracking effect with optimized callback
   useEffect(() => {
     if (gameState !== "playing") return;
     
     let animationFrameId;
-    const updateFPS = () => {
-      const now = performance.now();
-      const delta = now - fpsRef.current.lastTime;
-      
-      fpsRef.current.frames++;
-      
-      if (delta >= 1000) {
-        setFps(Math.round((fpsRef.current.frames * 1000) / delta));
-        fpsRef.current.frames = 0;
-        fpsRef.current.lastTime = now;
-      }
-      
-      animationFrameId = requestAnimationFrame(updateFPS);
+    const frameLoop = () => {
+      updateFps();
+      animationFrameId = requestAnimationFrame(frameLoop);
     };
     
-    animationFrameId = requestAnimationFrame(updateFPS);
+    animationFrameId = requestAnimationFrame(frameLoop);
     
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [gameState]);
+  }, [gameState, updateFps]);
 
-  // Modify startPlaying to handle audio initialization
+  // Add a handler function for when loading completes
+  const handleLoadingComplete = useCallback(() => {
+    console.log("🚀 Loading completed, setting assets as loaded");
+    
+    // Use requestAnimationFrame to sync with the next frame
+    requestAnimationFrame(() => {
+      // Set assets loaded first
+      setAssetsLoaded(true);
+      
+      // Wait for next frame to remove loading screen
+      requestAnimationFrame(() => {
+        // Remove loading screen
+        setIsLoading(false);
+        
+        // Wait one more frame before state transitions
+        requestAnimationFrame(() => {
+          // If we came from the ship selection screen, set game state to playing
+          if (gameState === "shipselect") {
+            setGameState("playing");
+            console.log("Game started: Playing state with ship:", selectedShip);
+          }
+        });
+      });
+    });
+  }, [gameState, selectedShip]);
+
+  // Modify startPlaying to handle transitions better
   const startPlaying = async () => {
     try {
       console.log("Game starting: Playing state");
+      
+      // Show loading screen
+      setIsLoading(true);
+      
+      // Wait for next frame before heavy operations
+      await new Promise(resolve => requestAnimationFrame(resolve));
       
       // Reset game state
       setScore(0);
@@ -661,24 +869,45 @@ function App() {
         controlsRef.current.boost = false;
       }
 
-      // Handle user interaction and ensure audio is ready
-      await audioSystem.handleUserInteraction();
+      // Initialize audio in the background
+      const audioPromise = (async () => {
+        try {
+          await audioSystem.handleUserInteraction();
+          
+          if (!audioInitialized) {
+            if (!audioSystem.audioContext) {
+              await audioSystem.initializeAudioContext();
+            }
+            
+            const result = await audioSystem.init();
+            setAudioInitialized(result);
+            
+            if (result && (!audioSystem.soundBuffers.has('background') || !audioSystem.soundBuffers.has('engine'))) {
+              await audioSystem.loadSounds();
+            }
+          }
+
+          if (audioSystem.audioContext?.state === 'suspended') {
+            await audioSystem.audioContext.resume();
+          }
+        } catch (error) {
+          console.error('❌ Error initializing audio:', error);
+        }
+      })();
+
+      // Don't wait for audio to complete - let it initialize in background
+      audioPromise.catch(() => {}); // Prevent unhandled rejection
       
-      if (!audioInitialized) {
-        const result = await audioSystem.init();
-        setAudioInitialized(result);
-      }
-
-      // Resume audio context if needed
-      if (audioSystem.audioContext?.state === 'suspended') {
-        await audioSystem.audioContext.resume();
-      }
-
-      // Set game state to trigger audio
-      setGameState("playing");
-      console.log("Game started: Playing state with ship:", selectedShip);
+      console.log("Game ready to start with ship:", selectedShip);
     } catch (error) {
       console.error('❌ Error starting game:', error);
+      // In case of error, use RAF for smooth transition
+      requestAnimationFrame(() => {
+        setIsLoading(false);
+        requestAnimationFrame(() => {
+          setGameState("playing");
+        });
+      });
     }
   };
 
@@ -687,6 +916,9 @@ function App() {
     // Ensure audio is initialized on ship selection click
     await audioSystem.handleUserInteraction();
     setSelectedShip(shipId);
+    
+    // Save selection in local storage
+    localStorage.setItem("selectedShip", shipId);
   };
 
   // Keep the testAudio function for internal use
@@ -806,8 +1038,9 @@ function App() {
     return "bg-red-500";
   };
 
-  if (!assetsLoaded) {
-    return <LoadingScreen onLoaded={() => setAssetsLoaded(true)} />;
+  // Modify the render condition for the loading screen
+  if (isLoading) {
+    return <LoadingScreen onLoaded={handleLoadingComplete} />;
   }
 
   return (
@@ -844,7 +1077,7 @@ function App() {
             <div className="flex-grow flex flex-col justify-center items-center p-6">
               {currentSection === "play" && (
                 <div className="flex flex-col items-center w-full max-w-md space-y-6 sm:space-y-8">
-                  <h1 className="game-title text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] tracking-normal mx-auto text-center">NAD RACER</h1>
+                  <h1 className="game-title text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2 tracking-normal mx-auto text-center">NAD RACER</h1>
                   <div className="flex flex-col items-center gap-6 w-full">
                     <ConnectedContent startGame={startGame} />
                     {SHOW_DIRECT_PLAY_BUTTON && (
@@ -903,10 +1136,9 @@ function App() {
                   ship.id === selectedShip && (
                     <div key={ship.id} className="w-full">
                       <div className="relative w-full h-40 mb-3 overflow-hidden rounded-lg bg-gradient-to-b from-transparent to-black/20">
-                        <img 
-                          src={ship.preview} 
-                          alt={ship.name} 
-                          className="w-full h-full object-contain" 
+                        <ShipPreview 
+                          shipId={ship.id} 
+                          className="w-full h-full" 
                         />
                         <div className="absolute inset-0 bg-[var(--monad-purple)]/5 border border-[var(--monad-purple)]/20 rounded-lg">
                           <div className="absolute -top-10 -left-10 w-16 h-16 bg-[var(--monad-purple)]/10 rounded-full blur-xl"></div>
@@ -987,10 +1219,9 @@ function App() {
                     onClick={() => handleShipSelect(ship.id)}
                   >
                     <div className="relative w-full h-48 lg:h-56 mb-4 overflow-hidden rounded-lg bg-gradient-to-b from-transparent to-black/20">
-                      <img 
-                        src={ship.preview} 
-                        alt={ship.name} 
-                        className={`w-full h-full object-contain transition-transform duration-700 
+                      <ShipPreview 
+                        shipId={ship.id} 
+                        className={`w-full h-full transition-transform duration-700 
                           ${selectedShip === ship.id ? "scale-110" : "group-hover:scale-105"}`} 
                       />
                       
@@ -1049,142 +1280,14 @@ function App() {
         </div>
       )}
       
-      {/* In-game HUD */}
-      {gameState === "playing" && (
-        <React.Fragment>
-          <div className="absolute top-4 left-4 bg-transparent p-4 rounded-xl border border-[var(--monad-off-white)]/30 z-10">
-            <div className="flex items-center gap-6">
-              <div>
-                <span className="text-4xl md:text-5xl text-[var(--monad-off-white)]">{score}</span>
-              </div>
-              <div>
-                <div className="flex gap-1">
-                  {Array(9)
-                    .fill()
-                    .map((_, i) => (
-                      <div
-                        key={i}
-                        className={`w-1 h-8 rounded-full ${i < health * 3 ? getHealthColor(health) : "bg-gray-700"}`}
-                      ></div>
-                    ))}
-                </div>
-                <p className="text-xs uppercase text-[var(--monad-off-white)] mt-1">HEALTH</p>
-              </div>
-            </div>
-          </div>
-          
-          {/* FPS Counter */}
-          <div className="absolute top-28 left-4 text-xs text-[var(--monad-off-white)]/80">
-            FPS: {fps}
-          </div>
-        </React.Fragment>
-      )}
+      {/* In-game HUD - Replace with optimized component */}
+      {gameState === "playing" && <GameHUD score={score} health={health} getHealthColor={getHealthColor} fps={fps} />}
       
-      {/* Transaction Status Bar - Updated Design */}
-      {gameState === "playing" && (
-        <div className="absolute top-4 right-4 z-10 max-w-[200px]">
-          <div className="flex flex-col items-end space-y-1.5">
-            {txHistory.map((tx) => {
-              const ageMs = Date.now() - tx.timestamp;
-              const opacity = Math.max(0, 1 - ageMs / 5000);
-              
-              if (opacity <= 0) return null;
-              
-              // Determine notification style based on type
-              let style = {
-                collection: {
-                  text: "text-[var(--monad-purple)]",
-                  dot: "bg-[var(--monad-purple)]"
-                },
-                minting: {
-                  text: "text-yellow-400",
-                  dot: "bg-yellow-400"
-                },
-                error: {
-                  text: "text-red-400",
-                  dot: "bg-red-400"
-                }
-              }[tx.type] || {
-                text: "text-[var(--monad-purple)]",
-                dot: "bg-[var(--monad-purple)]"
-              };
-              
-              return (
-                <div 
-                  key={tx.id} 
-                  className="flex items-center bg-black/40 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-[var(--monad-off-white)]/10" 
-                  style={{ opacity }}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${style.text}`}>{tx.message}</span>
-                    {tx.txHash && (
-                      <span className="text-[10px] text-[var(--monad-off-white)]/60">{tx.txHash}</span>
-                    )}
-                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`}></span>
-                  </div>
-                </div>
-              );
-            }).filter(Boolean)}
-          </div>
-        </div>
-      )}
+      {/* Transaction Status Bar - Replace with optimized component */}
+      {gameState === "playing" && <TransactionNotifications txHistory={txHistory} />}
       
-      {/* Mobile controls */}
-      {gameState === "playing" && (
-        <div className="fixed bottom-12 left-1/2 transform -translate-x-1/2 z-50 flex justify-between w-11/12 max-w-md md:hidden touch-none">
-          <button
-            className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
-            onTouchStart={(e) => {
-              e.preventDefault();
-              controlsRef.current.left = true;
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              controlsRef.current.left = false;
-            }}
-            onTouchCancel={(e) => {
-              e.preventDefault();
-              controlsRef.current.left = false;
-            }}
-          >
-            <img src="/svg/left.svg" alt="Left" className="w-10 h-10 pointer-events-none" draggable="false" />
-          </button>
-          <button
-            className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
-            onTouchStart={(e) => {
-              e.preventDefault();
-              controlsRef.current.boost = true;
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              controlsRef.current.boost = false;
-            }}
-            onTouchCancel={(e) => {
-              e.preventDefault();
-              controlsRef.current.boost = false;
-            }}
-          >
-            <img src="/svg/fire.svg" alt="Boost" className="w-10 h-10 pointer-events-none" draggable="false" />
-          </button>
-          <button
-            className="w-20 h-20 bg-transparent border border-[var(--monad-off-white)]/30 rounded-full transition-all duration-300 flex items-center justify-center active:scale-95 hover:text-[var(--monad-purple)] touch-none select-none"
-            onTouchStart={(e) => {
-              e.preventDefault();
-              controlsRef.current.right = true;
-            }}
-            onTouchEnd={(e) => {
-              e.preventDefault();
-              controlsRef.current.right = false;
-            }}
-            onTouchCancel={(e) => {
-              e.preventDefault();
-              controlsRef.current.right = false;
-            }}
-          >
-            <img src="/svg/right.svg" alt="Right" className="w-10 h-10 pointer-events-none" draggable="false" />
-          </button>
-        </div>
-      )}
+      {/* Mobile controls - Replace with optimized component */}
+      {gameState === "playing" && <MobileControls controlsRef={controlsRef} />}
       
       {/* Game over screen */}
       {gameState === "gameover" && (

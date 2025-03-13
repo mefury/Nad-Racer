@@ -94,33 +94,61 @@ class AudioSystem {
 
     // Initialize the audio system and load all sounds
     async init() {
-        if (this.initialized) return;
+        if (this.initialized) return true;  // Return true if already initialized
 
         try {
             if (!this.audioContext) {
-                console.log('⚠️ Audio context not ready, waiting for user interaction...');
+                console.log('⚠️ Audio context not ready, initializing it now...');
+                try {
+                    await this.initializeAudioContext();
+                } catch (err) {
+                    console.error('❌ Failed to initialize audio context during init:', err);
+                    return false;
+                }
+            }
+
+            // If still no audio context, fail gracefully
+            if (!this.audioContext) {
+                console.warn('⚠️ Could not create audio context, audio will be disabled');
                 return false;
             }
 
             // Resume audio context if it's suspended
             if (this.audioContext.state === 'suspended') {
-                await this.audioContext.resume();
-                console.log('🎵 Audio context resumed');
+                try {
+                    await this.audioContext.resume();
+                    console.log('🎵 Audio context resumed');
+                } catch (err) {
+                    console.error('❌ Failed to resume audio context:', err);
+                    // Continue anyway
+                }
             }
 
-            // Load all game sounds
-            await this.loadSounds();
+            // Load all game sounds with a timeout
+            try {
+                await Promise.race([
+                    this.loadSounds(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Sound loading timeout')), 5000)
+                    )
+                ]);
+            } catch (error) {
+                console.error('❌ Sound loading error or timeout:', error);
+                // Continue without sounds if loading fails
+                // This ensures the game can proceed even with audio issues
+            }
             
             this.initialized = true;
             console.log('🎵 Audio system initialized successfully');
             return true;
         } catch (error) {
             console.error('❌ Failed to initialize audio system:', error);
+            this.initialized = false;  // Make sure initialization can be retried
             return false;
         }
     }
 
-    // Load all game sound files
+    // Load all game sound files with improved error handling
     async loadSounds() {
         const soundFiles = {
             coin: '/sounds/coin.mp3',
@@ -130,19 +158,41 @@ class AudioSystem {
         };
 
         try {
+            // Create loading promises for each sound with individual timeouts
             const loadPromises = Object.entries(soundFiles).map(async ([key, path]) => {
-                const response = await fetch(path);
-                const arrayBuffer = await response.arrayBuffer();
-                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-                this.soundBuffers.set(key, audioBuffer);
-                console.log(`🎵 Loaded sound: ${key}`);
+                try {
+                    // Individual timeout for each sound file (3 seconds)
+                    const response = await Promise.race([
+                        fetch(path),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error(`Timeout loading ${key}`)), 3000)
+                        )
+                    ]);
+                    
+                    const arrayBuffer = await response.arrayBuffer();
+                    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    this.soundBuffers.set(key, audioBuffer);
+                    console.log(`🎵 Loaded sound: ${key}`);
+                } catch (error) {
+                    console.error(`❌ Failed to load sound ${key}:`, error);
+                    // Don't throw here - we want to try loading other sounds even if one fails
+                }
             });
 
+            // Wait for all sound loading attempts to complete
             await Promise.all(loadPromises);
-            console.log('🎵 All sounds loaded successfully');
+            
+            // Check if any sounds were loaded successfully
+            if (this.soundBuffers.size > 0) {
+                console.log(`🎵 Successfully loaded ${this.soundBuffers.size} sounds`);
+                return true;
+            } else {
+                console.warn('⚠️ No sounds were loaded successfully');
+                return false;
+            }
         } catch (error) {
             console.error('❌ Error loading sounds:', error);
-            throw error;
+            return false; // Return false instead of throwing to avoid blocking the app
         }
     }
 

@@ -5,10 +5,10 @@
 
 import React, { useEffect, useRef, useState, useCallback } from "react"; // React hooks for component lifecycle and refs
 import * as THREE from "three"; // THREE.js for 3D rendering
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader"; // Loader for GLTF 3D models
 // AudioSystem import removed
 // eslint-disable-next-line no-unused-vars
 import { CONFIG, resetGameState, spawnObstacle, spawnCoins, updateShipMovement, handleCollisions, applyBlinkEffect, spawnNewObjects, updateObstacleAnimations, updateCoinAnimations } from "./racingLogic"; // Game logic and config, suppress unused vars warning
+import { createSpeederShip, createBumbleShip, addEngineEffects } from "./shipModels"; // Import custom ship model creators
 
 // RacingScene component renders the 3D game scene and handles animation loop
 function RacingScene({ score, setScore, setHealth, health, endGame, gameState, controlsRef, selectedShip, onCoinCollect, onObstacleHit }) {
@@ -192,47 +192,67 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
     rocketGroupRef.current = rocketGroup;
     if (!scene.children.includes(rocketGroup)) {
       rocketGroup.position.set(shipConfig.POSITION_X, shipConfig.POSITION_Y, shipConfig.POSITION_Z); // Set initial position
-      rocketGroup.rotation.set(shipConfig.ROTATION_X, 0, shipConfig.ROTATION_Z); // Apply only X and Z from config, Y handled by model
+      rocketGroup.rotation.set(shipConfig.ROTATION_X, shipConfig.ROTATION_Y, shipConfig.ROTATION_Z); // Apply rotation from config
       scene.add(rocketGroup);
     }
 
-    // Load ship model asynchronously if not already loaded
+    // Load ship model only if not already loaded
     if (!modelLoadedRef.current && gameState === "playing") {
-      const gltfLoader = new GLTFLoader();
-      gltfLoader.loadAsync(`/${shipConfig.GLTF_PATH}`).then((gltf) => {
-        const model = gltf.scene; // Extract the 3D model
-        model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true; // Enable shadow casting
-            child.receiveShadow = true; // Enable shadow receiving
-            if (child.material) originalMaterialsRef.current.set(child, child.material.clone()); // Store original material for blinking
+      console.log(`Loading ship model: ${selectedShip}`);
+      
+      // Clear any existing ship model from the group
+      while (rocketGroup.children.length > 0) {
+        rocketGroup.remove(rocketGroup.children[0]);
+      }
+      
+      // Create custom ship based on selected ship type
+      if (shipConfig.SHIP_TYPE === 'speeder') {
+        const shipModel = createSpeederShip();
+        console.log("Created custom Speeder ship model");
+        
+        // Apply scaling from config
+        shipModel.scale.set(shipConfig.SCALE, shipConfig.SCALE, shipConfig.SCALE);
+        
+        // Add engine exhaust effects
+        addEngineEffects(shipModel, 'speeder');
+        console.log("Added engine exhaust effects to Speeder ship");
+        
+        // Store original materials for blinking effect
+        shipModel.traverse((child) => {
+          if (child.isMesh && child.material) {
+            originalMaterialsRef.current.set(child, child.material.clone());
           }
         });
-        const box = new THREE.Box3().setFromObject(model); // Compute bounding box
-        const size = new THREE.Vector3();
-        box.getSize(size); // Get model dimensions
-        const uniformScale = Math.min(
-          shipConfig.TARGET_WIDTH / size.x,   // Scale to target width
-          shipConfig.TARGET_HEIGHT / size.y,  // Scale to target height
-          shipConfig.TARGET_LENGTH / size.z   // Scale to target length
-        ) * shipConfig.SCALE; // Apply uniform scale factor
-        model.scale.set(uniformScale, uniformScale, uniformScale);
-        model.position.set(0, 0, 0); // Center within rocketGroup
-
-        // Adjust model rotation based on selected ship
-        if (selectedShip === "SHIP_1") {
-          model.rotation.y = shipConfig.ROTATION_Y; // Apply Math.PI to face negative Z
-          console.log("Ship 1 model rotation set to:", shipConfig.ROTATION_Y);
-        } else if (selectedShip === "SHIP_2") {
-          model.rotation.y = -Math.PI / 2; // Face negative Z from positive X
-          console.log("Ship 2 model adjusted: rotation.y = -Math.PI/2 to face forward");
-        }
-
-        rocketGroup.add(model);
+        
+        // Add the ship model to the rocket group
+        rocketGroup.add(shipModel);
         rocketGroup.castShadow = true;
         modelLoadedRef.current = true;
-        console.log(`Ship model loaded: ${selectedShip} from ${shipConfig.GLTF_PATH}`);
-      }).catch((error) => console.error("GLTF load error:", error));
+      } else if (shipConfig.SHIP_TYPE === 'bumble') {
+        const shipModel = createBumbleShip();
+        console.log("Created custom Bumble ship model");
+        
+        // Apply scaling from config
+        shipModel.scale.set(shipConfig.SCALE, shipConfig.SCALE, shipConfig.SCALE);
+        
+        // Add engine exhaust effects
+        addEngineEffects(shipModel, 'bumble');
+        console.log("Added engine exhaust effects to Bumble ship");
+        
+        // Store original materials for blinking effect
+        shipModel.traverse((child) => {
+          if (child.isMesh && child.material) {
+            originalMaterialsRef.current.set(child, child.material.clone());
+          }
+        });
+        
+        // Add the ship model to the rocket group
+        rocketGroup.add(shipModel);
+        rocketGroup.castShadow = true;
+        modelLoadedRef.current = true;
+      } else {
+        console.error("Unknown ship type:", shipConfig.SHIP_TYPE);
+      }
     }
 
     // --- Starfield Setup ---
@@ -443,6 +463,87 @@ function RacingScene({ score, setScore, setHealth, health, endGame, gameState, c
         if (score > prevScoreRef.current) {
           console.log("🚀 RacingScene - Score increased from", prevScoreRef.current, "to", score, "- onCoinCollect:", !!onCoinCollect);
           prevScoreRef.current = score;
+        }
+
+        // Handle engine effects animation if the ship has them
+        if (rocketGroup.children[0]?.userData?.engineEffects) {
+          const shipModel = rocketGroup.children[0];
+          const engineEffects = shipModel.userData.engineEffects;
+          
+          // Update animation time
+          engineEffects.userData.time = (engineEffects.userData.time || 0) + deltaScale * 5;
+          const animTime = engineEffects.userData.time;
+          
+          // Animate based on ship type
+          if (engineEffects.userData.type === 'speeder') {
+            // Get flames from userData if available
+            const flames = engineEffects.userData.flames || [];
+            const originalScales = engineEffects.userData.originalScales || [];
+            
+            // Adjust engine flame intensity based on boost - reduce the boost intensity from 1.3 to 1.15
+            const boostIntensity = controlsRef.current.boost ? 1.15 : 1.0;
+            
+            // Animate each flame with pulsing and boost effects
+            flames.forEach((flame, index) => {
+              if (flame && originalScales[index]) {
+                // Apply varied pulsing effect - reduce max pulse values
+                const pulseValue = Math.sin(animTime * (0.8 + index * 0.4)) * 0.12 + 1;
+                const flutterValue = Math.sin(animTime * (3 + index)) * 0.04 + 1;
+                
+                // Apply different scale factors with boost consideration
+                const origScale = originalScales[index];
+                
+                // Calculate new scales with limits to prevent getting too large
+                const newScaleX = Math.min(origScale.x * (pulseValue + flutterValue * 0.2) * boostIntensity, origScale.x * 1.2);
+                const newScaleY = Math.min(origScale.y * pulseValue * boostIntensity, origScale.y * 1.2);
+                const newScaleZ = Math.min(origScale.z * (flutterValue * 0.6 + pulseValue * 0.2) * boostIntensity, origScale.z * 1.2);
+                
+                flame.scale.set(newScaleX, newScaleY, newScaleZ);
+                
+                // Increase opacity slightly when boosting but keep it reasonable
+                if (flame.material) {
+                  flame.material.opacity = Math.min(flame.material.opacity * boostIntensity, 0.9);
+                }
+              }
+            });
+            
+            // Animate side thrusters if turning
+            engineEffects.children.forEach(child => {
+              // Side thruster detection by position
+              const isSideThruster = child.position.x !== 0 && Math.abs(child.position.x) > 0.5;
+              if (isSideThruster) {
+                if (!child.userData.originalScale) {
+                  child.userData.originalScale = child.scale.clone();
+                }
+                
+                const origScale = child.userData.originalScale;
+                const sideBoost = 1.0;
+                
+                // Enhance left thruster when turning right and vice versa - reduce the boost factor
+                if (child.position.x < 0 && controlsRef.current.right) {
+                  // Right turn = boost left thruster
+                  const scaleFactor = Math.min(1.3 * boostIntensity, 1.3);
+                  child.scale.copy(origScale).multiplyScalar(scaleFactor);
+                  if (child.material) child.material.opacity = Math.min(0.8 * boostIntensity, 0.8);
+                } else if (child.position.x > 0 && controlsRef.current.left) {
+                  // Left turn = boost right thruster
+                  const scaleFactor = Math.min(1.3 * boostIntensity, 1.3);
+                  child.scale.copy(origScale).multiplyScalar(scaleFactor);
+                  if (child.material) child.material.opacity = Math.min(0.8 * boostIntensity, 0.8);
+                } else {
+                  // Normal pulsing for idle thrusters
+                  const sideThrust = (Math.sin(animTime * 4) * 0.1 + 0.95) * sideBoost;
+                  child.scale.copy(origScale).multiplyScalar(sideThrust);
+                  if (child.material) child.material.opacity = 0.7;
+                }
+              }
+            });
+          }
+          // Handle Bumble ship animation similarly
+          else if (engineEffects.userData.type === 'bumble') {
+            // Animation logic for bumble ship...
+            // (Similar to above but adapted for bumble ship's engine layout)
+          }
         }
       }
 
