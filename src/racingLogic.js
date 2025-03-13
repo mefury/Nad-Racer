@@ -56,8 +56,8 @@ export const CONFIG = {
 
   // --- Movement and Physics ---
   MAX_LATERAL_SPEED: 0.7,        // Maximum speed the ship can move left or right per second
-  FORWARD_SPEED: 2.5,            // Constant forward movement speed along Z-axis per second
-  BOOST_SPEED: 2.7,              // Additional speed when boost is activated per second
+  FORWARD_SPEED: 2.3,            // Constant forward movement speed along Z-axis per second
+  BOOST_SPEED: 2.5,              // Additional speed when boost is activated per second
   ACCELERATION: 0.085,           // Rate of lateral acceleration per frame (scaled by delta)
   FRICTION: 0.88,                // Friction factor to slow lateral movement per frame (0-1, lower = more friction)
   LATERAL_BOUNDS: 0,             // Calculated later as half of TRACK_WIDTH to limit lateral movement
