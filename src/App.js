@@ -428,6 +428,108 @@ function WalletAddressListener() {
   return null;
 }
 
+// Add a LoadingScreen component
+function LoadingScreen({ onLoaded }) {
+  const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState("INITIALIZING");
+  const assetsToLoad = [
+    // Images and UI elements
+    '/models/ship1.png', '/models/ship2.png',
+    '/textures/space.jpg',
+    '/svg/fire.svg', '/svg/right.svg', '/svg/left.svg', 
+    '/svg/play.svg', '/svg/about.svg', '/svg/story.svg', 
+    '/svg/leaderboard.svg', '/svg/shop.svg',
+    
+    // Sound files
+    '/sounds/crash.mp3', '/sounds/coin.mp3', 
+    '/sounds/gamebg.mp3', '/sounds/engine.mp3',
+    
+    // 3D models
+    '/models/ship/scene.gltf', '/models/ship/scene.bin',
+    '/models/ship2/scene.gltf', '/models/ship2/scene.bin'
+  ];
+  
+  // Change loading text based on progress
+  useEffect(() => {
+    if (progress < 25) {
+      setLoadingText("INITIALIZING");
+    } else if (progress < 50) {
+      setLoadingText("LOADING ASSETS");
+    } else if (progress < 75) {
+      setLoadingText("PREPARING ENGINES");
+    } else {
+      setLoadingText("READY TO LAUNCH");
+    }
+  }, [progress]);
+
+  useEffect(() => {
+    let loadedAssets = 0;
+
+    const updateProgress = () => {
+      loadedAssets += 1;
+      setProgress((loadedAssets / assetsToLoad.length) * 100);
+      if (loadedAssets === assetsToLoad.length) {
+        setTimeout(() => onLoaded(), 500); // Small delay for smooth transition
+      }
+    };
+
+    // Preload all assets
+    assetsToLoad.forEach((asset) => {
+      if (asset.endsWith('.mp3')) {
+        // Handle audio files
+        const audio = new Audio();
+        audio.src = asset;
+        audio.addEventListener('canplaythrough', updateProgress, { once: true });
+        audio.addEventListener('error', updateProgress, { once: true });
+        audio.load();
+      } else if (asset.endsWith('.gltf') || asset.endsWith('.bin')) {
+        // For 3D models, we'll just count them as loaded after a timeout
+        // since we can't directly preload them like images
+        setTimeout(updateProgress, 100);
+      } else {
+        // Handle image files
+        const img = new Image();
+        img.src = asset;
+        img.onload = updateProgress;
+        img.onerror = updateProgress;
+      }
+    });
+  }, [onLoaded]);
+
+  return (
+    <div className="fixed inset-0 flex flex-col items-center justify-center bg-black z-50">
+      <div className="text-center px-6 max-w-md w-full flex flex-col items-center">
+        {/* Game title with stylized appearance */}
+        <h1 className="game-title text-4xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2">NAD RACER</h1>
+        
+        {/* Animated subtitle */}
+        <div className="flex justify-center mb-8 w-full">
+          <p className="text-[var(--monad-off-white)]/80 text-sm uppercase tracking-[0.3em]">{loadingText}</p>
+          <span className="animate-pulse">...</span>
+        </div>
+        
+        {/* Loading progress container with glow effect */}
+        <div className="w-64 h-3 bg-black/40 rounded-full overflow-hidden border border-[var(--monad-off-white)]/20 shadow-[0_0_10px_rgba(131,110,249,0.2)] relative mx-auto">
+          {/* Animated loading bar */}
+          <div 
+            className="h-full bg-gradient-to-r from-[var(--monad-purple)]/80 to-[var(--monad-purple)] transition-all duration-300 ease-out"
+            style={{ width: `${progress}%` }}
+          ></div>
+          
+          {/* Glow effect at the end of the loading bar */}
+          <div 
+            className="absolute top-0 bottom-0 w-4 bg-[var(--monad-purple)]/50 blur-sm transition-all duration-300"
+            style={{ left: `calc(${progress}% - 16px)`, opacity: progress > 5 ? 1 : 0 }}
+          ></div>
+        </div>
+        
+        {/* Loading percentage */}
+        <p className="mt-3 text-xs text-[var(--monad-off-white)]/60">{Math.round(progress)}%</p>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [gameState, setGameState] = useState("start"); // Tracks current game state
   const [score, setScore] = useState(0); // Current score during gameplay
@@ -435,14 +537,13 @@ function App() {
   const [selectedShip, setSelectedShip] = useState("SHIP_1"); // Selected ship ID
   const controlsRef = useRef({ left: false, right: false, boost: false });
   const [currentSection, setCurrentSection] = useState("play");
-  // eslint-disable-next-line no-unused-vars
   const [collectedCoins, setCollectedCoins] = useState(0);
-  // eslint-disable-next-line no-unused-vars
   const [lastTxStatus, setLastTxStatus] = useState(null);
   const [txHistory, setTxHistory] = useState([]);
   const [audioInitialized, setAudioInitialized] = useState(false);
   const [fps, setFps] = useState(0); // Add FPS state
   const fpsRef = useRef({ frames: 0, lastTime: performance.now() }); // Add FPS tracking ref
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
   
   // Initialize audio system
   useEffect(() => {
@@ -704,6 +805,10 @@ function App() {
     if (health === 2) return "bg-orange-500";
     return "bg-red-500";
   };
+
+  if (!assetsLoaded) {
+    return <LoadingScreen onLoaded={() => setAssetsLoaded(true)} />;
+  }
 
   return (
     <div className={`relative w-screen h-screen ${gameState === "playing" ? "overflow-hidden" : "overflow-auto"} bg-[var(--monad-black)] text-[var(--monad-off-white)]`}>
