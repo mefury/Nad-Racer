@@ -1,8 +1,8 @@
 // Backend service for API calls
 // Using absolute URL to avoid potential path issues
 const API_URL = process.env.NODE_ENV === 'production' 
-  ? window.location.origin + '/api'  // In production, use relative path
-  : 'https://api.nadracer.xyz/api';     // In development, use localhost
+  ? 'https://api.nadracer.xyz/api'  // In production, use the deployed API URL
+  : 'https://api.nadracer.xyz/api';     // In development, use the same API for now
 
 // Utility function to log API requests
 const logApiRequest = (method, endpoint, data = null) => {
@@ -29,7 +29,10 @@ export const checkPlayerRegistration = async (walletAddress) => {
   logApiRequest('GET', `/player/${walletAddress}`);
   
   try {
-    const response = await fetch(`${API_URL}/player/${walletAddress}`);
+    const response = await fetch(`${API_URL}/player/${walletAddress}`, {
+      mode: 'cors',
+      credentials: 'include'
+    });
     return await handleApiResponse(response, 'Player registration check');
   } catch (error) {
     console.error('❌ Failed to check player registration:', error);
@@ -46,7 +49,9 @@ export const registerPlayer = async (walletAddress, username) => {
     const response = await fetch(`${API_URL}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      mode: 'cors',
+      credentials: 'include'
     });
     
     return await handleApiResponse(response, 'Player registration');
@@ -61,7 +66,10 @@ export const getLeaderboard = async () => {
   logApiRequest('GET', '/leaderboard');
   
   try {
-    const response = await fetch(`${API_URL}/leaderboard`);
+    const response = await fetch(`${API_URL}/leaderboard`, {
+      mode: 'cors',
+      credentials: 'include'
+    });
     return await handleApiResponse(response, 'Leaderboard fetch');
   } catch (error) {
     console.error('❌ Failed to fetch leaderboard:', error);
@@ -78,7 +86,9 @@ export const saveScore = async (walletAddress, score) => {
     const response = await fetch(`${API_URL}/save-score`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      mode: 'cors',
+      credentials: 'include'
     });
     
     return await handleApiResponse(response, 'Score saving');
@@ -114,7 +124,9 @@ export const processTokens = async (walletAddress, pointsToMint) => {
     const response = await fetch(`${API_URL}/mint-tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      mode: 'cors',
+      credentials: 'include'
     });
     
     console.log(`🔷 processTokens received response in ${Date.now() - requestStartTime}ms`);
@@ -130,4 +142,38 @@ export const processTokens = async (walletAddress, pointsToMint) => {
     console.error('❌ Failed to process token minting:', error);
     return { success: false, error: error.message };
   }
+};
+
+// Test API connection and return connection status
+export const testApiConnection = async () => {
+  logApiRequest('GET', '/health/cors-test');
+  
+  try {
+    console.log(`🔍 Testing API connection to ${API_URL}/health/cors-test`);
+    const response = await fetch(`${API_URL}/health/cors-test`, {
+      mode: 'cors',
+      credentials: 'include'
+    });
+    
+    const result = await handleApiResponse(response, 'API connection test');
+    return {
+      success: true,
+      message: 'API connection successful',
+      apiUrl: API_URL,
+      corsResponse: result
+    };
+  } catch (error) {
+    console.error('❌ API connection test failed:', error);
+    return {
+      success: false,
+      message: `API connection failed: ${error.message}`,
+      apiUrl: API_URL,
+      error: error.message
+    };
+  }
+};
+
+// Get current API URL in use
+export const getApiUrl = () => {
+  return API_URL;
 }; 
