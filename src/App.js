@@ -22,49 +22,8 @@ import ShipPreview from './ShipPreview';
 import * as THREE from 'three';
 import { CONFIG } from './racingLogic';
 
-// Enable or disable console logs globally - set to false for production
-const DEBUG = false;
-
-// Setup console log control - this affects all files that use console methods
-(() => {
-  if (!DEBUG) {
-    // Store original console methods
-    const originalConsole = {
-      log: console.log,
-      warn: console.warn,
-      error: console.error,
-      info: console.info,
-      debug: console.debug
-    };
-    
-    // Override console methods to be no-ops (do nothing)
-    console.log = console.warn = console.info = console.debug = () => {};
-    
-    // Keep error logging for critical errors, comment next line to disable all logs completely
-    // console.error = originalConsole.error;
-    console.error = () => {};
-    
-    // Method to temporarily restore logging if needed for debugging
-    window.enableLogs = () => {
-      console.log = originalConsole.log;
-      console.warn = originalConsole.warn;
-      console.error = originalConsole.error;
-      console.info = originalConsole.info;
-      console.debug = originalConsole.debug;
-      console.log('Console logging restored temporarily');
-    };
-    
-    // Method to disable logs again
-    window.disableLogs = () => {
-      console.log = console.warn = console.info = console.debug = () => {};
-      console.error = () => {};
-    };
-  }
-})();
-
 // Constants for game configuration
 const APP_VERSION = "1.2.0 Beta"; // Version of the app displayed in footer
-const SHOW_DIRECT_PLAY_BUTTON = false; // Option to show a direct play button bypassing wallet connection
 
 // Ship options for selection screen
 const SHIP_OPTIONS = [
@@ -704,7 +663,7 @@ function App() {
   // Skip loading screen in development mode with a flag
   useEffect(() => {
     // If enabled, skip loading screen in development
-    if (isDev && DEBUG && process.env.NODE_ENV === 'development') {
+    if (isDev && window.DEBUG && process.env.NODE_ENV === 'development') {
       const fastStartParam = new URLSearchParams(window.location.search).get('fastStart');
       if (fastStartParam === 'true') {
         setAssetsLoaded(true);
@@ -1080,14 +1039,6 @@ function App() {
                   <h1 className="game-title text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2 tracking-normal mx-auto text-center">NAD RACER</h1>
                   <div className="flex flex-col items-center gap-6 w-full">
                     <ConnectedContent startGame={startGame} />
-                    {SHOW_DIRECT_PLAY_BUTTON && (
-                      <button
-                        className="px-12 py-4 text-xl md:text-2xl bg-black/40 border-2 border-[var(--monad-purple)] text-[var(--monad-off-white)] rounded-lg hover:bg-[var(--monad-purple)]/20 hover:shadow-[0_0_15px_rgba(131,110,249,0.6)] transition-all duration-300 w-full max-w-xs font-[var(--title-font)]"
-                        onClick={startGame}
-                      >
-                        PLAY DIRECTLY
-                      </button>
-                    )}
                   </div>
                   <div className="w-full mt-4 md:mt-16 px-4 sm:px-0">
                     <ProfileInfo />
