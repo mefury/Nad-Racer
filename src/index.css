@@ -22,7 +22,7 @@
   /* Typography */
   --title-font: "Orbitron", sans-serif;      /* Font for titles (e.g., NAD RACER, GAME OVER) */
   --text-font: "Roboto", sans-serif;         /* Font for general text and buttons */
-  --title-font-size: 6rem;                   /* Default title size */
+  --title-font-size: 2.5rem;                   /* Default title size */
   --subtitle-font-size: 2rem;                /* Default subtitle size */
   --button-font-size: 1.25rem;               /* Default button size (text-xl) */
   --text-font-size: 1rem;                    /* Default text size (text-base) */

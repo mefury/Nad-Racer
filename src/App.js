@@ -498,9 +498,9 @@ function LoadingScreen({ onLoaded }) {
 
   return (
     <div className="fixed inset-0 flex flex-col items-center justify-center bg-black z-50">
-      <div className="text-center px-6 max-w-md w-full flex flex-col items-center">
-        {/* Game title with stylized appearance */}
-        <h1 className="game-title text-4xl md:text-5xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2">NAD RACER</h1>
+      <div className="text-center px-4 max-w-md w-full flex flex-col items-center">
+        {/* Game title with much smaller size on mobile */}
+        <h1 className="game-title text-[2rem] sm:text-3xl md:text-4xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] mb-2 tracking-normal mx-auto text-center">NAD RACER</h1>
         
         {/* Animated subtitle */}
         <div className="flex justify-center mb-8 w-full">
@@ -843,8 +843,8 @@ function App() {
           <div className="absolute inset-0 z-10 flex flex-col min-h-screen">
             <div className="flex-grow flex flex-col justify-center items-center p-6">
               {currentSection === "play" && (
-                <div className="flex flex-col items-center w-11/12 max-w-md space-y-8">
-                  <h1 className="game-title text-5xl md:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)]">NAD RACER</h1>
+                <div className="flex flex-col items-center w-full max-w-md space-y-6 sm:space-y-8">
+                  <h1 className="game-title text-[2rem] sm:text-4xl md:text-5xl lg:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-[var(--monad-off-white)] to-[var(--monad-purple)] font-bold drop-shadow-[0_0_10px_rgba(131,110,249,0.5)] tracking-normal mx-auto text-center">NAD RACER</h1>
                   <div className="flex flex-col items-center gap-6 w-full">
                     <ConnectedContent startGame={startGame} />
                     {SHOW_DIRECT_PLAY_BUTTON && (
