@@ -98,7 +98,7 @@ export const saveScore = async (walletAddress, score) => {
   }
 };
 
-// Process coin collection - sends request to mint tokens
+// Process coin collection - sends request to transfer tokens from treasury
 export const processTokens = async (walletAddress, pointsToMint) => {
   console.log(`🔷 processTokens called with walletAddress: ${walletAddress}, pointsToMint: ${pointsToMint}`);
 
@@ -115,13 +115,13 @@ export const processTokens = async (walletAddress, pointsToMint) => {
   // Use the correct parameter name expected by the backend
   const data = { walletAddress, coinsCollected: pointsToMint };
   console.log(`🔷 processTokens data payload:`, data);
-  logApiRequest('POST', '/mint-tokens', data);
+  logApiRequest('POST', '/transfer-tokens', data);
   
   try {
     const requestStartTime = Date.now();
-    console.log(`🔷 processTokens sending request to ${API_URL}/mint-tokens`);
+    console.log(`🔷 processTokens sending request to ${API_URL}/transfer-tokens`);
     
-    const response = await fetch(`${API_URL}/mint-tokens`, {
+    const response = await fetch(`${API_URL}/transfer-tokens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -130,16 +130,16 @@ export const processTokens = async (walletAddress, pointsToMint) => {
     });
     
     console.log(`🔷 processTokens received response in ${Date.now() - requestStartTime}ms`);
-    const result = await handleApiResponse(response, 'Token minting');
+    const result = await handleApiResponse(response, 'Token transfer');
     
     // Log the transaction hash if available
     if (result.success && result.txHash) {
-      console.log(`🔷 processTokens minting successful with txHash: ${result.txHash}`);
+      console.log(`🔷 processTokens transfer successful with txHash: ${result.txHash}`);
     }
     
     return result;
   } catch (error) {
-    console.error('❌ Failed to process token minting:', error);
+    console.error('❌ Failed to process token transfer:', error);
     return { success: false, error: error.message };
   }
 };

@@ -4,6 +4,26 @@
 
 import * as THREE from "three";
 
+// Create caches for geometries and materials to improve performance
+const geometryCache = {};
+const materialCache = {};
+
+// Utility function to get or create geometry
+function getGeometry(key, createGeometryFn) {
+  if (!geometryCache[key]) {
+    geometryCache[key] = createGeometryFn();
+  }
+  return geometryCache[key];
+}
+
+// Utility function to get or create material
+function getMaterial(key, properties) {
+  if (!materialCache[key]) {
+    materialCache[key] = new THREE.MeshStandardMaterial(properties);
+  }
+  return materialCache[key].clone(); // Clone to allow individual changes to properties
+}
+
 // Factory function to create Ship 1 (Speeder) using Three.js geometry
 export function createSpeederShip() {
   const shipGroup = new THREE.Group();
@@ -18,8 +38,8 @@ export function createSpeederShip() {
   };
   
   // Main body - elongated shape
-  const bodyGeometry = new THREE.CylinderGeometry(1, 0.7, 4, 8);
-  const bodyMaterial = new THREE.MeshStandardMaterial({
+  const bodyGeometry = getGeometry('speeder_body', () => new THREE.CylinderGeometry(1, 0.7, 4, 8));
+  const bodyMaterial = getMaterial('speeder_body', {
     color: colors.main,
     metalness: 0.7,
     roughness: 0.3
@@ -31,8 +51,8 @@ export function createSpeederShip() {
   shipGroup.add(body);
   
   // Nose cone
-  const noseGeometry = new THREE.ConeGeometry(0.7, 2, 8);
-  const noseMaterial = new THREE.MeshStandardMaterial({
+  const noseGeometry = getGeometry('speeder_nose', () => new THREE.ConeGeometry(0.7, 2, 8));
+  const noseMaterial = getMaterial('speeder_nose', {
     color: colors.main,
     metalness: 0.7,
     roughness: 0.3
@@ -44,8 +64,10 @@ export function createSpeederShip() {
   shipGroup.add(nose);
   
   // Cockpit
-  const cockpitGeometry = new THREE.SphereGeometry(0.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-  const cockpitMaterial = new THREE.MeshStandardMaterial({
+  const cockpitGeometry = getGeometry('speeder_cockpit', () => 
+    new THREE.SphereGeometry(0.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2)
+  );
+  const cockpitMaterial = getMaterial('speeder_cockpit', {
     color: colors.cockpit,
     metalness: 0.8,
     roughness: 0.2,
@@ -59,8 +81,8 @@ export function createSpeederShip() {
   shipGroup.add(cockpit);
   
   // Wings
-  const wingGeometry = new THREE.BoxGeometry(6, 0.2, 1.5);
-  const wingMaterial = new THREE.MeshStandardMaterial({
+  const wingGeometry = getGeometry('speeder_wing', () => new THREE.BoxGeometry(6, 0.2, 1.5));
+  const wingMaterial = getMaterial('speeder_wing', {
     color: colors.main,
     metalness: 0.7,
     roughness: 0.3
@@ -71,8 +93,8 @@ export function createSpeederShip() {
   shipGroup.add(wings);
   
   // Wing tips - angle up at the ends
-  const wingTipGeometry = new THREE.BoxGeometry(1, 0.6, 1.5);
-  const wingTipMaterial = new THREE.MeshStandardMaterial({
+  const wingTipGeometry = getGeometry('speeder_wingtip', () => new THREE.BoxGeometry(1, 0.6, 1.5));
+  const wingTipMaterial = getMaterial('speeder_wingtip', {
     color: colors.accent,
     metalness: 0.8,
     roughness: 0.2
@@ -91,8 +113,8 @@ export function createSpeederShip() {
   shipGroup.add(rightWingTip);
   
   // Rear fin
-  const finGeometry = new THREE.BoxGeometry(0.2, 1.2, 1.5);
-  const finMaterial = new THREE.MeshStandardMaterial({
+  const finGeometry = getGeometry('speeder_fin', () => new THREE.BoxGeometry(0.2, 1.2, 1.5));
+  const finMaterial = getMaterial('speeder_fin', {
     color: colors.accent,
     metalness: 0.7,
     roughness: 0.3
@@ -103,8 +125,8 @@ export function createSpeederShip() {
   shipGroup.add(fin);
   
   // Single engine at the back
-  const engineGeometry = new THREE.CylinderGeometry(0.7, 0.8, 0.8, 16);
-  const engineMaterial = new THREE.MeshStandardMaterial({
+  const engineGeometry = getGeometry('speeder_engine', () => new THREE.CylinderGeometry(0.7, 0.8, 0.8, 16));
+  const engineMaterial = getMaterial('speeder_engine', {
     color: colors.accent,
     metalness: 0.9,
     roughness: 0.2
@@ -116,8 +138,8 @@ export function createSpeederShip() {
   shipGroup.add(engine);
   
   // Engine glow (exhaust) - facing backward
-  const exhaustGeometry = new THREE.CircleGeometry(0.5, 16);
-  const exhaustMaterial = new THREE.MeshStandardMaterial({
+  const exhaustGeometry = getGeometry('speeder_exhaust', () => new THREE.CircleGeometry(0.5, 16));
+  const exhaustMaterial = getMaterial('speeder_exhaust', {
     color: colors.engine,
     emissive: colors.engine,
     emissiveIntensity: 1.0,
@@ -131,8 +153,8 @@ export function createSpeederShip() {
   shipGroup.add(exhaust);
   
   // Add some detail elements
-  const detailGeometry = new THREE.BoxGeometry(1.5, 0.1, 0.1);
-  const detailMaterial = new THREE.MeshStandardMaterial({
+  const detailGeometry = getGeometry('speeder_detail', () => new THREE.BoxGeometry(1.5, 0.1, 0.1));
+  const detailMaterial = getMaterial('speeder_detail', {
     color: colors.detail,
     metalness: 0.8,
     roughness: 0.2
@@ -148,8 +170,12 @@ export function createSpeederShip() {
   }
   
   // Add small side thrusters for detail
+  const smallThrusterGeometry = getGeometry('speeder_smallThruster', () => 
+    new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8)
+  );
+  const smallGlowGeometry = getGeometry('speeder_smallGlow', () => new THREE.CircleGeometry(0.12, 8));
+  
   for (let side of [-1, 1]) {
-    const smallThrusterGeometry = new THREE.CylinderGeometry(0.15, 0.2, 0.3, 8);
     const smallThruster = new THREE.Mesh(smallThrusterGeometry, engineMaterial);
     
     smallThruster.rotation.x = Math.PI / 2;
@@ -157,7 +183,6 @@ export function createSpeederShip() {
     shipGroup.add(smallThruster);
     
     // Small glow for side thrusters
-    const smallGlowGeometry = new THREE.CircleGeometry(0.12, 8);
     const smallGlow = new THREE.Mesh(smallGlowGeometry, exhaustMaterial);
     smallGlow.position.set(side * 1.2, -0.1, 2.4);
     smallGlow.rotation.y = Math.PI;
@@ -189,8 +214,8 @@ export function createBumbleShip() {
   };
   
   // Main body - rounded shape
-  const bodyGeometry = new THREE.SphereGeometry(2, 16, 16);
-  const bodyMaterial = new THREE.MeshStandardMaterial({
+  const bodyGeometry = getGeometry('bumble_body', () => new THREE.SphereGeometry(2, 16, 16));
+  const bodyMaterial = getMaterial('bumble_body', {
     color: colors.main,
     metalness: 0.4,
     roughness: 0.6,
@@ -200,8 +225,8 @@ export function createBumbleShip() {
   shipGroup.add(body);
   
   // Add black stripes (bee pattern)
-  const stripeGeometry = new THREE.CylinderGeometry(2.02, 2.02, 0.3, 32);
-  const stripeMaterial = new THREE.MeshStandardMaterial({
+  const stripeGeometry = getGeometry('bumble_stripe', () => new THREE.CylinderGeometry(2.02, 2.02, 0.3, 32));
+  const stripeMaterial = getMaterial('bumble_stripe', {
     color: colors.accent,
     metalness: 0.5,
     roughness: 0.6
@@ -217,8 +242,10 @@ export function createBumbleShip() {
   }
   
   // Cockpit window
-  const windowGeometry = new THREE.SphereGeometry(0.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-  const windowMaterial = new THREE.MeshStandardMaterial({
+  const windowGeometry = getGeometry('bumble_window', () => 
+    new THREE.SphereGeometry(0.8, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2)
+  );
+  const windowMaterial = getMaterial('bumble_window', {
     color: colors.window,
     metalness: 0.9,
     roughness: 0.1,
@@ -231,12 +258,14 @@ export function createBumbleShip() {
   shipGroup.add(cockpitWindow);
   
   // Wings/fins (antennae for bee theme)
-  const antennaGeometry = new THREE.CylinderGeometry(0.1, 0.05, 2, 8);
-  const antennaMaterial = new THREE.MeshStandardMaterial({
+  const antennaGeometry = getGeometry('bumble_antenna', () => new THREE.CylinderGeometry(0.1, 0.05, 2, 8));
+  const antennaMaterial = getMaterial('bumble_antenna', {
     color: colors.accent,
     metalness: 0.6,
     roughness: 0.4
   });
+  
+  const ballGeometry = getGeometry('bumble_ball', () => new THREE.SphereGeometry(0.15, 8, 8));
   
   // Create two antennae
   for (let side of [-1, 1]) {
@@ -247,28 +276,29 @@ export function createBumbleShip() {
     shipGroup.add(antenna);
     
     // Add a little ball at the end of each antenna
-    const ballGeometry = new THREE.SphereGeometry(0.15, 8, 8);
     const ball = new THREE.Mesh(ballGeometry, antennaMaterial);
     ball.position.set(side * 1.1, 1.3, -2.2);
     shipGroup.add(ball);
   }
   
   // Engine exhausts
-  const engineGeometry = new THREE.CylinderGeometry(0.5, 0.7, 0.4, 16);
-  const engineMaterial = new THREE.MeshStandardMaterial({
+  const engineGeometry = getGeometry('bumble_engine', () => new THREE.CylinderGeometry(0.5, 0.7, 0.4, 16));
+  const engineMaterial = getMaterial('bumble_engine', {
     color: colors.details,
     metalness: 0.7,
     roughness: 0.3
   });
   
   // Exhaust glow material
-  const glowMaterial = new THREE.MeshStandardMaterial({
+  const glowMaterial = getMaterial('bumble_glow', {
     color: colors.engine,
     emissive: colors.engine,
     emissiveIntensity: 0.8,
     transparent: true,
     opacity: 0.9
   });
+  
+  const glowGeometry = getGeometry('bumble_glowCircle', () => new THREE.CircleGeometry(0.4, 16));
   
   // Add engines
   for (let side of [-1, 1]) {
@@ -280,7 +310,6 @@ export function createBumbleShip() {
       shipGroup.add(engine);
       
       // Engine glow
-      const glowGeometry = new THREE.CircleGeometry(0.4, 16);
       const glow = new THREE.Mesh(glowGeometry, glowMaterial);
       glow.position.set(side * 1, height, 2.25);
       glow.rotation.y = Math.PI;
@@ -289,15 +318,15 @@ export function createBumbleShip() {
   }
   
   // Add stinger at the back
-  const stingerGeometry = new THREE.ConeGeometry(0.4, 1.2, 16);
+  const stingerGeometry = getGeometry('bumble_stinger', () => new THREE.ConeGeometry(0.4, 1.2, 16));
   const stinger = new THREE.Mesh(stingerGeometry, stripeMaterial);
   stinger.rotation.x = Math.PI / 2;
   stinger.position.set(0, -0.3, 2.5);
   shipGroup.add(stinger);
   
   // Add wings
-  const wingGeometry = new THREE.CylinderGeometry(0.05, 1.5, 0.1, 3);
-  const wingMaterial = new THREE.MeshStandardMaterial({
+  const wingGeometry = getGeometry('bumble_wing', () => new THREE.CylinderGeometry(0.05, 1.5, 0.1, 3));
+  const wingMaterial = getMaterial('bumble_wing', {
     color: colors.window,
     transparent: true,
     opacity: 0.8,
@@ -367,10 +396,10 @@ export function addEngineEffects(shipGroup, type = 'default') {
   if (type === 'speeder') {
     // Create the main engine flame
     // By default, ConeGeometry points along +Y axis, we need it along +Z
-    const flameGeometry = new THREE.ConeGeometry(size, flameLength, 16, 3);
+    const flameGeometry = getGeometry('speeder_flame', () => new THREE.ConeGeometry(size, flameLength, 16, 3));
     
     // Core flame - bright and glowing
-    const coreMaterial = new THREE.MeshBasicMaterial({
+    const coreMaterial = getMaterial('speeder_coreFlame', {
       color: 0xffffff,
       transparent: true,
       opacity: 0.9
@@ -387,7 +416,7 @@ export function addEngineEffects(shipGroup, type = 'default') {
     engineGroup.add(coreFlame);
     
     // Middle flame layer - colored
-    const middleMaterial = new THREE.MeshBasicMaterial({
+    const middleMaterial = getMaterial('speeder_middleFlame', {
       color: color,
       transparent: true,
       opacity: 0.7
@@ -405,7 +434,7 @@ export function addEngineEffects(shipGroup, type = 'default') {
     engineGroup.add(middleFlame);
     
     // Outer flame layer - more transparent
-    const outerMaterial = new THREE.MeshBasicMaterial({
+    const outerMaterial = getMaterial('speeder_outerFlame', {
       color: color,
       transparent: true,
       opacity: 0.3
@@ -423,13 +452,12 @@ export function addEngineEffects(shipGroup, type = 'default') {
     engineGroup.add(outerFlame);
     
     // Add small side thrusters flame effects
+    const sideFlameGeometry = getGeometry('speeder_sideFlame', () => 
+      new THREE.ConeGeometry(0.1, 0.35, 8, 2)
+    );
+    
     for (let side of [-1, 1]) {
       const sidePosition = new THREE.Vector3(side * 1.2, -0.1, 2.4);
-      const sideSize = 0.1;  // Reduced from 0.15
-      const sideLength = 0.35; // Reduced from 0.5
-      
-      // Side thruster flame geometry
-      const sideFlameGeometry = new THREE.ConeGeometry(sideSize, sideLength, 8, 2);
       
       // Core flame for side thruster with correct orientation
       const sideCoreFlame = new THREE.Mesh(sideFlameGeometry, coreMaterial);
@@ -476,16 +504,26 @@ export function addEngineEffects(shipGroup, type = 'default') {
     ];
     
     // Create flames for each engine
+    const flameGeometry = getGeometry('bumble_flame', () => 
+      new THREE.ConeGeometry(size * 0.8, flameLength, 12, 2)
+    );
+    
+    // Core material
+    const coreMaterial = getMaterial('bumble_coreFlame', {
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.8
+    });
+    
+    // Outer material
+    const outerMaterial = getMaterial('bumble_outerFlame', {
+      color: color,
+      transparent: true,
+      opacity: 0.4
+    });
+    
     enginePositions.forEach((pos, index) => {
-      const flameGeometry = new THREE.ConeGeometry(size * 0.8, flameLength, 12, 2);
-      
       // Core flame with correct orientation
-      const coreMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.8
-      });
-      
       const coreFlame = new THREE.Mesh(flameGeometry, coreMaterial);
       // Rotate so cone points along Z axis with tip backward (away from the ship)
       coreFlame.rotation.x = Math.PI / 2;
@@ -496,12 +534,6 @@ export function addEngineEffects(shipGroup, type = 'default') {
       engineGroup.add(coreFlame);
       
       // Outer flame with correct orientation
-      const outerMaterial = new THREE.MeshBasicMaterial({
-        color: color,
-        transparent: true,
-        opacity: 0.4
-      });
-      
       const outerFlame = new THREE.Mesh(flameGeometry, outerMaterial);
       outerFlame.scale.set(1.4, 1.4, 1.3);
       // Rotate so cone points along Z axis with tip backward (away from the ship)
@@ -524,4 +556,27 @@ export function addEngineEffects(shipGroup, type = 'default') {
   shipGroup.userData.engineEffects = engineGroup;
   
   return engineGroup;
+}
+
+// Function to clear caches - can be called during cleanup if needed
+export function clearGeometryAndMaterialCaches() {
+  // Dispose of all cached geometries
+  Object.values(geometryCache).forEach(geometry => {
+    if (geometry && typeof geometry.dispose === 'function') {
+      geometry.dispose();
+    }
+  });
+  
+  // Dispose of all cached materials
+  Object.values(materialCache).forEach(material => {
+    if (material && typeof material.dispose === 'function') {
+      material.dispose();
+    }
+  });
+  
+  // Clear the caches
+  Object.keys(geometryCache).forEach(key => delete geometryCache[key]);
+  Object.keys(materialCache).forEach(key => delete materialCache[key]);
+  
+  console.log('Geometry and material caches cleared');
 } 
